@@ -1,0 +1,16 @@
+[package]
+name = "pycavalry"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+clap = { version = "4.5.4", features = ["derive"] }
+clio = { version = "0.3.5", features = ["clap-parse"] }
+im = "15.1.0"
+ruff_text_size = { path = "ruff/crates/ruff_text_size" }
+ruff_python_ast = { path = "ruff/crates/ruff_python_ast" }
+ruff_python_parser = { path = "ruff/crates/ruff_python_parser" }
+replace_with = "0.1.7"
+
