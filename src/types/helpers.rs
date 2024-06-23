@@ -9,6 +9,15 @@ pub fn is_subtype(a: &Type, b: &Type) -> bool {
         (Type::Any | Type::Unknown, _) => true,
         (_, Type::Any | Type::Unknown) => true,
         (Type::Int, Type::Float) => true,
+        (Type::Function(f1), Type::Function(f2)) => {
+            f1.args.len() == f2.args.len()
+                && f1
+                    .args
+                    .iter()
+                    .enumerate()
+                    .all(|(i, t1)| is_subtype(&f2.args[i], t1))
+                && is_subtype(&f1.ret, &f2.ret)
+        }
         _ => false,
     }
 }
@@ -54,4 +63,3 @@ pub fn union(mut types: Vec<Type>) -> Type {
         Type::Union(types)
     }
 }
-
