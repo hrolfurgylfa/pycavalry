@@ -54,6 +54,7 @@ struct Opt {
 enum Error {
     IoError(io::Error),
     FromUtf8Error(FromUtf8Error),
+    RuffParseError(ruff_python_parser::ParseError)
 }
 
 impl From<io::Error> for Error {
@@ -68,13 +69,19 @@ impl From<FromUtf8Error> for Error {
     }
 }
 
+impl From<ruff_python_parser::ParseError> for Error {
+    fn from(value: ruff_python_parser::ParseError) -> Self {
+        Self::RuffParseError(value)
+    }
+}
+
 fn main() -> Result<(), Error> {
     let mut opt = Opt::parse();
     let file_name = opt.file;
     let file_content = String::from_utf8(read(&file_name)?)?;
 
     // Parse the module with ruff
-    let module = parse(&file_content, Mode::Module).unwrap();
+    let module = parse(&file_content, Mode::Module)?;
     let errors = module.errors();
     if errors.len() != 0 {
         for err in errors {
