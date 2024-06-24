@@ -25,6 +25,7 @@ reveal_type(a(1, 2, 3))
 def do(a: int, b: float):
     return b
     return a
+    return "f"
 
 
 reveal_type(do)
