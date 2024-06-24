@@ -22,7 +22,80 @@ use crate::diagnostic::{Diagnostic, DiagnosticType};
 use crate::helpers::read_exact_from_file;
 use crate::scope::Scope;
 use crate::state::{Info, StatementSynthData, StatementSynthDataReturn};
-use crate::types::{is_subtype, union, Class, Function, Type};
+use crate::types::{
+    collapse_union_types, has_types_specified, is_subtype, union, Class, Function, Type,
+};
+
+fn synth_annotation(
+    info: &Info,
+    scope: &mut Scope,
+    maybe_ast: Option<Expr>,
+) -> Result<Type, Diagnostic> {
+    match _synth_annotation(info, scope, maybe_ast) {
+        Ok(Type::Union(types)) => Ok(union(types)),
+        other => other,
+    }
+}
+
+fn _synth_annotation(
+    info: &Info,
+    scope: &mut Scope,
+    maybe_ast: Option<Expr>,
+) -> Result<Type, Diagnostic> {
+    let Some(ast) = maybe_ast else {
+        return Ok(Type::Unknown);
+    };
+
+    match ast {
+        Expr::Subscript(s) => {
+            let range = s.range();
+            let value_range = s.value.range();
+            let value = _synth_annotation(info, scope, Some(*s.value))?;
+            let slice = _synth_annotation(info, scope, Some(*s.slice))?;
+            if has_types_specified(&value) {
+                return Err(Diagnostic::error(
+                    format!("Type {} already has type arguments.", value),
+                    value_range,
+                ));
+            }
+            match value {
+                Type::Union(mut types) => {
+                    types.push(slice);
+                    Ok(union(collapse_union_types(types)))
+                }
+                t => Err(Diagnostic::error(
+                    format!("{} can't take type arguments.", t),
+                    range,
+                ))?,
+            }
+        }
+        Expr::Name(n) => {
+            match scope.get(&n.id) {
+                Some(t) => Ok(t),
+                None => {
+                    match n.id.as_str() {
+                        // TODO: Remove this hardcoded non-import
+                        "Any" => Ok(Type::Any),
+                        "Unknown" => Ok(Type::Unknown),
+                        "Union" => Ok(Type::Union(vec![])),
+                        "str" => Ok(Type::String),
+                        "int" => Ok(Type::Int),
+                        "float" => Ok(Type::Float),
+                        "bool" => Ok(Type::Bool),
+                        "None" => Ok(Type::None),
+                        "..." => Ok(Type::Ellipsis),
+                        unknown => Err(Diagnostic::new(
+                            format!("Name {} not found in scope.", unknown),
+                            DiagnosticType::Error,
+                            n.range(),
+                        )),
+                    }
+                }
+            }
+        }
+        e => unimplemented!("{:?}", e),
+    }
+}
 
 fn synth(info: &Info, scope: &mut Scope, ast: Expr) -> Result<Type, Diagnostic> {
     match ast {
@@ -132,17 +205,28 @@ fn synth_func(
     data: &mut StatementSynthData,
     scope: &mut Scope,
     def: StmtFunctionDef,
-) -> Result<Function, Vec<Diagnostic>> {
+) -> (Function, Vec<Diagnostic>) {
     let mut errors = vec![];
-    let expected_ret = Type::Unknown; // def.returns.
+    let expected_ret = match synth_annotation(info, scope, def.returns.map(|i| *i)) {
+        Ok(t) => t,
+        Err(e) => {
+            errors.push(e);
+            Type::Unknown
+        }
+    };
 
     scope.add_scope();
     // Load function arguments
     let mut args = vec![];
     let mut arg_names = vec![];
     for arg in def.parameters.args {
-        // TODO: Parse the annotation
-        let annotation = Type::Unknown; // arg.parameter.annotation.map(|i| *i).unwrap_or();
+        let annotation = match synth_annotation(info, scope, arg.parameter.annotation.map(|i| *i)) {
+            Ok(t) => t,
+            Err(e) => {
+                errors.push(e);
+                Type::Unknown
+            }
+        };
         let mut arg_type_added = false;
         if let Some(default) = arg.default {
             match check(info, scope, *default, annotation.clone()) {
@@ -183,7 +267,7 @@ fn synth_func(
 
     scope.pop_scope();
 
-    return Ok(func);
+    (func, errors)
 }
 
 pub fn synth_statement(
@@ -230,10 +314,14 @@ pub fn synth_statement(
         Stmt::FunctionDef(def) => {
             let func_name = def.name.id.clone();
 
-            let parsed_func = synth_func(info, &mut data, scope, def)?;
-
+            let (parsed_func, errors) = synth_func(info, &mut data, scope, def);
             scope.set(func_name, Type::Function(parsed_func));
-            Ok(())
+
+            if errors.len() > 0 {
+                Err(errors)
+            } else {
+                Ok(())
+            }
         }
         Stmt::ClassDef(def) => {
             let cls_name = def.name.id.clone();
