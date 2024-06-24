@@ -26,7 +26,7 @@ use std::{
     process::exit,
     string::FromUtf8Error,
 };
-use synth::synth_statement;
+use synth::check_statement;
 
 pub mod diagnostic;
 pub mod helpers;
@@ -54,7 +54,7 @@ struct Opt {
 enum Error {
     IoError(io::Error),
     FromUtf8Error(FromUtf8Error),
-    RuffParseError(ruff_python_parser::ParseError)
+    RuffParseError(ruff_python_parser::ParseError),
 }
 
 impl From<io::Error> for Error {
@@ -98,7 +98,7 @@ fn main() -> Result<(), Error> {
         ruff_python_ast::Mod::Expression(_) => unreachable!(),
     };
     for stmt in statements.body.into_iter() {
-        match synth_statement(&info, &mut data, &mut scope, stmt) {
+        match check_statement(&info, &mut data, &mut scope, stmt) {
             Ok(()) => (),
             Err(errors) => {
                 for e in errors {

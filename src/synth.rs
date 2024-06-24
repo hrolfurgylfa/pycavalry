@@ -200,7 +200,7 @@ fn check(info: &Info, scope: &mut Scope, ast: Expr, typ: Type) -> Result<Type, D
     }
 }
 
-fn synth_func(
+fn check_func(
     info: &Info,
     data: &mut StatementSynthData,
     scope: &mut Scope,
@@ -255,7 +255,7 @@ fn synth_func(
 
     // Synth statements
     for stmt in def.body {
-        match synth_statement(info, data, scope, stmt) {
+        match check_statement(info, data, scope, stmt) {
             Ok(_) => (),
             Err(e) => errors.extend(e),
         }
@@ -270,7 +270,7 @@ fn synth_func(
     (func, errors)
 }
 
-pub fn synth_statement(
+pub fn check_statement(
     info: &Info,
     mut data: &mut StatementSynthData,
     scope: &mut Scope,
@@ -314,7 +314,7 @@ pub fn synth_statement(
         Stmt::FunctionDef(def) => {
             let func_name = def.name.id.clone();
 
-            let (parsed_func, errors) = synth_func(info, &mut data, scope, def);
+            let (parsed_func, errors) = check_func(info, &mut data, scope, def);
             scope.set(func_name, Type::Function(parsed_func));
 
             if errors.len() > 0 {
