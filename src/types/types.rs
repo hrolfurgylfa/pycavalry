@@ -143,116 +143,51 @@ pub struct TypeClassProperty {
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum TypeLiteral {
-    StringLiteral(StringLiteral),
-    BytesLiteral(BytesLiteral),
-    NumberLiteral(NumberLiteral),
-    BooleanLiteral(BooleanLiteral),
-    NoneLiteral(NoneLiteral),
-    EllipsisLiteral(EllipsisLiteral),
+    StringLiteral(String),
+    BytesLiteral(Vec<u8>),
+    IntLiteral(i64),
+    FloatLiteral(String),
+    BooleanLiteral(bool),
+    NoneLiteral(),
+    EllipsisLiteral(),
 }
 
 impl fmt::Display for TypeLiteral {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "Literal[{}]", self)
+        write!(f, "Literal[")?;
+        match self {
+            TypeLiteral::StringLiteral(i) => write!(f, "\"{}\"", i),
+            TypeLiteral::BytesLiteral(i) => write!(f, "b\"{:?}\"", i),
+            TypeLiteral::IntLiteral(i) => write!(f, "{}", i),
+            TypeLiteral::FloatLiteral(i) => write!(f, "{}", i),
+            TypeLiteral::BooleanLiteral(i) => write!(f, "{}", if *i { "True" } else { "False" }),
+            TypeLiteral::NoneLiteral() => write!(f, "None"),
+            TypeLiteral::EllipsisLiteral() => write!(f, "..."),
+        }?;
+        write!(f, "]")
     }
 }
 
 impl<'a> From<LiteralExpressionRef<'a>> for TypeLiteral {
     fn from(value: LiteralExpressionRef) -> Self {
         match value {
-            LiteralExpressionRef::StringLiteral(s) => TypeLiteral::StringLiteral(StringLiteral {
-                val: s.value.to_str().to_owned(),
-            }),
-            LiteralExpressionRef::BytesLiteral(b) => TypeLiteral::BytesLiteral(BytesLiteral {
-                val: b
-                    .value
+            LiteralExpressionRef::StringLiteral(s) => {
+                TypeLiteral::StringLiteral(s.value.to_str().to_owned())
+            }
+            LiteralExpressionRef::BytesLiteral(b) => TypeLiteral::BytesLiteral(
+                b.value
                     .iter()
                     .flat_map(|part| part.as_slice().iter().copied())
                     .collect::<Vec<_>>(),
-            }),
-            LiteralExpressionRef::NumberLiteral(n) => {
-                TypeLiteral::NumberLiteral(n.value.clone().into())
-            }
-            LiteralExpressionRef::BooleanLiteral(b) => {
-                TypeLiteral::BooleanLiteral(BooleanLiteral { val: b.value })
-            }
-            LiteralExpressionRef::NoneLiteral(_) => TypeLiteral::NoneLiteral(NoneLiteral {}),
-            LiteralExpressionRef::EllipsisLiteral(_) => {
-                TypeLiteral::EllipsisLiteral(EllipsisLiteral {})
-            }
+            ),
+            LiteralExpressionRef::NumberLiteral(n) => match n.value.clone() {
+                Number::Int(i) => TypeLiteral::IntLiteral(i.as_i64().unwrap()),
+                Number::Float(f) => TypeLiteral::FloatLiteral(f.to_string()),
+                Number::Complex { real: _, imag: _ } => unimplemented!(),
+            },
+            LiteralExpressionRef::BooleanLiteral(b) => TypeLiteral::BooleanLiteral(b.value),
+            LiteralExpressionRef::NoneLiteral(_) => TypeLiteral::NoneLiteral(),
+            LiteralExpressionRef::EllipsisLiteral(_) => TypeLiteral::EllipsisLiteral(),
         }
-    }
-}
-
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub struct StringLiteral {
-    val: String,
-}
-
-impl fmt::Display for StringLiteral {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "\"{}\"", self.val)
-    }
-}
-
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub struct BytesLiteral {
-    val: Vec<u8>,
-}
-
-impl fmt::Display for BytesLiteral {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "b\"{:?}\"", self.val)
-    }
-}
-
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub struct NumberLiteral {
-    val: String,
-}
-
-impl fmt::Display for NumberLiteral {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.val)
-    }
-}
-
-impl From<Number> for NumberLiteral {
-    fn from(value: Number) -> Self {
-        let v = match value {
-            Number::Int(i) => i.to_string(),
-            Number::Float(f) => f.to_string(),
-            Number::Complex { real, imag } => format!("{}+{}j", real, imag),
-        };
-        NumberLiteral { val: v }
-    }
-}
-
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub struct BooleanLiteral {
-    val: bool,
-}
-
-impl fmt::Display for BooleanLiteral {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", if self.val { "True" } else { "False" })
-    }
-}
-
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub struct NoneLiteral {}
-
-impl fmt::Display for NoneLiteral {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "None")
-    }
-}
-
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub struct EllipsisLiteral {}
-
-impl fmt::Display for EllipsisLiteral {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "...")
     }
 }
