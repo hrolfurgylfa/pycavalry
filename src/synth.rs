@@ -24,6 +24,7 @@ use crate::scope::Scope;
 use crate::state::{Info, StatementSynthData, StatementSynthDataReturn};
 use crate::types::{
     collapse_union_types, has_types_specified, is_subtype, union, Class, Function, Type,
+    TypeLiteral,
 };
 
 fn synth_annotation(
@@ -71,7 +72,7 @@ fn _synth_annotation(
         }
         Expr::Name(n) => {
             match scope.get(&n.id) {
-                Some(t) => Ok(t),
+                Some(t) => Ok(t.typ),
                 None => {
                     match n.id.as_str() {
                         // TODO: Remove this hardcoded non-import
@@ -100,16 +101,18 @@ fn _synth_annotation(
 fn synth(info: &Info, scope: &mut Scope, ast: Expr) -> Result<Type, Diagnostic> {
     match ast {
         Expr::NoneLiteral(_) => Ok(Type::None),
-        Expr::BooleanLiteral(_) => Ok(Type::Bool),
+        Expr::BooleanLiteral(l) => Ok(Type::Literal(TypeLiteral::BooleanLiteral(l.value))),
         Expr::NumberLiteral(n) => match n.value {
-            Number::Int(_) => Ok(Type::Int),
-            Number::Float(_) => Ok(Type::Float),
+            Number::Int(l) => Ok(Type::Literal(TypeLiteral::IntLiteral(l.as_i64().unwrap()))),
+            Number::Float(l) => Ok(Type::Literal(TypeLiteral::FloatLiteral(l.to_string()))),
             Number::Complex { real: _, imag: _ } => unimplemented!(),
         },
-        Expr::StringLiteral(_) => Ok(Type::String),
+        Expr::StringLiteral(s) => Ok(Type::Literal(TypeLiteral::StringLiteral(
+            s.value.to_str().to_owned(),
+        ))),
         Expr::Name(name) if name.ctx == ExprContext::Load => {
-            if let Some(type_) = scope.get(&name.id) {
-                Ok(type_)
+            if let Some(scoped) = scope.get(&name.id) {
+                Ok(scoped.typ)
             } else {
                 Err(Diagnostic::new(
                     format!("Name {} not found in scope.", name.id),
@@ -277,6 +280,36 @@ pub fn check_statement(
     stmt: Stmt,
 ) -> Result<(), Vec<Diagnostic>> {
     match stmt {
+        Stmt::AnnAssign(ass) => {
+            let mut errors = vec![];
+            let annotation = match synth_annotation(info, scope, Some(*ass.annotation)) {
+                Ok(t) => t,
+                Err(e) => {
+                    errors.push(e);
+                    Type::Unknown
+                }
+            };
+            if let Some(value) = ass.value {
+                match check(info, scope, *value, annotation.clone()) {
+                    Ok(_) => (),
+                    Err(e) => {
+                        errors.push(e);
+                    }
+                }
+            };
+            match *ass.target {
+                Expr::Name(name) => {
+                    assert_eq!(name.ctx, ExprContext::Store);
+                    scope.set(name.id, annotation);
+                }
+                node => panic!("Node {:?} not expected in type assignment.", node),
+            }
+            if errors.len() == 0 {
+                Ok(())
+            } else {
+                Err(errors)
+            }
+        }
         Stmt::Assign(ass) => {
             let typ = synth(info, scope, *ass.value).map_err(|e| vec![e])?;
             for target in ass.targets {

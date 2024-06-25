@@ -13,11 +13,24 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-use super::Type;
+use super::{Type, TypeLiteral};
 
+/// Check if a is a subtype of b, A is a subtype of b if a can do everything b can.
 pub fn is_subtype(a: &Type, b: &Type) -> bool {
     if a == b {
         return true;
+    }
+
+    if let Type::Literal(literal) = a {
+        return match literal {
+            TypeLiteral::StringLiteral(_) => is_subtype(&Type::String, b),
+            TypeLiteral::BytesLiteral(_) => unimplemented!(),
+            TypeLiteral::IntLiteral(_) => is_subtype(&Type::Int, b),
+            TypeLiteral::FloatLiteral(_) => is_subtype(&Type::Float, b),
+            TypeLiteral::BooleanLiteral(_) => is_subtype(&Type::Bool, b),
+            TypeLiteral::NoneLiteral() => is_subtype(&Type::None, b),
+            TypeLiteral::EllipsisLiteral() => is_subtype(&Type::Ellipsis, b),
+        };
     }
 
     match (a, b) {
@@ -86,6 +99,7 @@ pub fn union(mut types: Vec<Type>) -> Type {
 pub fn has_types_specified(type_: &Type) -> bool {
     match type_ {
         Type::Union(types) => types.len() != 0,
+        Type::Literal(TypeLiteral::Empty) => true,
         _ => false,
     }
 }

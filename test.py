@@ -13,12 +13,16 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-from typing import reveal_type
+from typing import Literal, reveal_type
 
 
 (lambda x, y, z: "asdf")(1, 2, 3)
 
 a = lambda x, y, z: "asdf"
+b = "str"
+b = "str2"
+b = "str3"
+reveal_type(b)
 reveal_type(a(1, 2, 3))
 
 
