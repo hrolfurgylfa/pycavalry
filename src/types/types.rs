@@ -69,8 +69,16 @@ impl fmt::Display for Type {
             Type::Function(func) => write!(f, "{}", func),
             Type::Class(cls) => write!(f, "{}", cls),
             Type::Union(types) => {
-                write!(f, "Union[")?;
-                write_iter(f, types.iter(), |f, t| write!(f, "{}", t))?;
+                if types.iter().all(|i| matches!(i, Type::Literal(_))) {
+                    write!(f, "Literal[")?;
+                    write_iter(f, types.iter(), |f, t| match t {
+                        Type::Literal(l) => display_type_literal_inside(f, l),
+                        _ => unreachable!(),
+                    })?;
+                } else {
+                    write!(f, "Union[")?;
+                    write_iter(f, types.iter(), |f, t| write!(f, "{}", t))?;
+                }
                 write!(f, "]")
             }
         }?;
@@ -148,22 +156,26 @@ pub enum TypeLiteral {
     IntLiteral(i64),
     FloatLiteral(String),
     BooleanLiteral(bool),
-    NoneLiteral(),
-    EllipsisLiteral(),
+    NoneLiteral,
+    EllipsisLiteral,
+}
+
+fn display_type_literal_inside(f: &mut fmt::Formatter, literal: &TypeLiteral) -> fmt::Result {
+    match literal {
+        TypeLiteral::StringLiteral(i) => write!(f, "\"{}\"", i),
+        TypeLiteral::BytesLiteral(i) => write!(f, "b\"{:?}\"", i),
+        TypeLiteral::IntLiteral(i) => write!(f, "{}", i),
+        TypeLiteral::FloatLiteral(i) => write!(f, "{}", i),
+        TypeLiteral::BooleanLiteral(i) => write!(f, "{}", if *i { "True" } else { "False" }),
+        TypeLiteral::NoneLiteral => write!(f, "None"),
+        TypeLiteral::EllipsisLiteral => write!(f, "..."),
+    }
 }
 
 impl fmt::Display for TypeLiteral {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "Literal[")?;
-        match self {
-            TypeLiteral::StringLiteral(i) => write!(f, "\"{}\"", i),
-            TypeLiteral::BytesLiteral(i) => write!(f, "b\"{:?}\"", i),
-            TypeLiteral::IntLiteral(i) => write!(f, "{}", i),
-            TypeLiteral::FloatLiteral(i) => write!(f, "{}", i),
-            TypeLiteral::BooleanLiteral(i) => write!(f, "{}", if *i { "True" } else { "False" }),
-            TypeLiteral::NoneLiteral() => write!(f, "None"),
-            TypeLiteral::EllipsisLiteral() => write!(f, "..."),
-        }?;
+        display_type_literal_inside(f, self)?;
         write!(f, "]")
     }
 }
@@ -186,8 +198,8 @@ impl<'a> From<LiteralExpressionRef<'a>> for TypeLiteral {
                 Number::Complex { real: _, imag: _ } => unimplemented!(),
             },
             LiteralExpressionRef::BooleanLiteral(b) => TypeLiteral::BooleanLiteral(b.value),
-            LiteralExpressionRef::NoneLiteral(_) => TypeLiteral::NoneLiteral(),
-            LiteralExpressionRef::EllipsisLiteral(_) => TypeLiteral::EllipsisLiteral(),
+            LiteralExpressionRef::NoneLiteral(_) => TypeLiteral::NoneLiteral,
+            LiteralExpressionRef::EllipsisLiteral(_) => TypeLiteral::EllipsisLiteral,
         }
     }
 }

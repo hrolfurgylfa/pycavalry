@@ -28,8 +28,8 @@ pub fn is_subtype(a: &Type, b: &Type) -> bool {
             TypeLiteral::IntLiteral(_) => is_subtype(&Type::Int, b),
             TypeLiteral::FloatLiteral(_) => is_subtype(&Type::Float, b),
             TypeLiteral::BooleanLiteral(_) => is_subtype(&Type::Bool, b),
-            TypeLiteral::NoneLiteral() => is_subtype(&Type::None, b),
-            TypeLiteral::EllipsisLiteral() => is_subtype(&Type::Ellipsis, b),
+            TypeLiteral::NoneLiteral => is_subtype(&Type::None, b),
+            TypeLiteral::EllipsisLiteral => is_subtype(&Type::Ellipsis, b),
         };
     }
 
@@ -82,7 +82,7 @@ fn flatten(types: Vec<Type>) -> Vec<Type> {
     }
     flattened
 }
-pub fn collapse_union_types(mut types: Vec<Type>) -> Vec<Type> {
+fn collapse_union_types(mut types: Vec<Type>) -> Vec<Type> {
     types = flatten(types);
     types = collapse_subtypes(types);
     types
@@ -96,12 +96,5 @@ pub fn union(mut types: Vec<Type>) -> Type {
         types.pop().unwrap()
     } else {
         Type::Union(types)
-    }
-}
-pub fn has_types_specified(type_: &Type) -> bool {
-    match type_ {
-        Type::Union(types) => types.len() != 0,
-        Type::Literal(TypeLiteral::Empty) => true,
-        _ => false,
     }
 }

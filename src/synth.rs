@@ -15,85 +15,216 @@
 
 use core::panic;
 use ruff_python_ast::{Expr, ExprContext, Number, Stmt, StmtFunctionDef};
-use ruff_text_size::Ranged;
-use std::mem;
+use ruff_text_size::{Ranged, TextRange};
+use std::{fmt, mem};
 
 use crate::diagnostic::{Diagnostic, DiagnosticType};
 use crate::helpers::read_exact_from_file;
 use crate::scope::Scope;
 use crate::state::{Info, StatementSynthData, StatementSynthDataReturn};
-use crate::types::{
-    collapse_union_types, has_types_specified, is_subtype, union, Class, Function, Type,
-    TypeLiteral,
-};
+use crate::types::{is_subtype, union, Class, Function, Type, TypeLiteral};
+
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+enum Annotation {
+    Type(RangedType),
+    PartialAnnotation(PartialAnnotation),
+}
+
+impl Ranged for Annotation {
+    fn range(&self) -> TextRange {
+        match self {
+            Annotation::Type(a) => a.range.range(),
+            Annotation::PartialAnnotation(a) => a.range.range(),
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+enum PartialAnnotationType {
+    Union,
+    Literal,
+}
+
+impl fmt::Display for PartialAnnotationType {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let name = match *self {
+            Self::Union => "Union",
+            Self::Literal => "Literal",
+        };
+        write!(f, "{}", name)
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+struct PartialAnnotation {
+    range: TextRange,
+    annotation: PartialAnnotationType,
+    arguments: Vec<Annotation>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+struct RangedType {
+    range: TextRange,
+    value: Type,
+}
+
+fn verify_annotation(ann: Annotation) -> Result<Type, Diagnostic> {
+    match ann {
+        Annotation::Type(t) => Ok(t.value),
+        Annotation::PartialAnnotation(t) => match t.annotation {
+            PartialAnnotationType::Union => Ok(union(
+                t.arguments
+                    .into_iter()
+                    .map(verify_annotation)
+                    .collect::<Result<Vec<Type>, Diagnostic>>()?,
+            )),
+            PartialAnnotationType::Literal => {
+                let mut literals = Vec::with_capacity(t.arguments.len());
+                for arg in t.arguments {
+                    match arg {
+                        Annotation::Type(t) => match t.value {
+                            Type::Literal(l) => literals.push(Type::Literal(l)),
+                            other => {
+                                return Err(Diagnostic::error(
+                                    format!("Expecting literal, found {}", other),
+                                    t.range,
+                                ));
+                            }
+                        },
+                        Annotation::PartialAnnotation(p) => {
+                            return Err(Diagnostic::error(
+                                format!("Expecting literal, found {}", p.annotation),
+                                p.range,
+                            ));
+                        }
+                    }
+                }
+                Ok(union(literals))
+            }
+        },
+    }
+}
 
 fn synth_annotation(
     info: &Info,
     scope: &mut Scope,
     maybe_ast: Option<Expr>,
 ) -> Result<Type, Diagnostic> {
-    match _synth_annotation(info, scope, maybe_ast) {
-        Ok(Type::Union(types)) => Ok(union(types)),
-        other => other,
-    }
+    let ann = _synth_annotation(info, scope, maybe_ast)?;
+    verify_annotation(ann)
 }
 
 fn _synth_annotation(
     info: &Info,
     scope: &mut Scope,
     maybe_ast: Option<Expr>,
-) -> Result<Type, Diagnostic> {
+) -> Result<Annotation, Diagnostic> {
     let Some(ast) = maybe_ast else {
-        return Ok(Type::Unknown);
+        return Ok(Annotation::Type(RangedType {
+            value: Type::Unknown,
+            range: TextRange::default(),
+        }));
     };
 
     match ast {
+        // TODO: Make sure Literal get arguments!
         Expr::Subscript(s) => {
-            let range = s.range();
             let value_range = s.value.range();
-            let value = _synth_annotation(info, scope, Some(*s.value))?;
-            let slice = _synth_annotation(info, scope, Some(*s.slice))?;
-            if has_types_specified(&value) {
-                return Err(Diagnostic::error(
-                    format!("Type {} already has type arguments.", value),
-                    value_range,
-                ));
-            }
-            match value {
-                Type::Union(mut types) => {
-                    types.push(slice);
-                    Ok(union(collapse_union_types(types)))
+            let mut value = match _synth_annotation(info, scope, Some(*s.value))? {
+                Annotation::PartialAnnotation(value) => value,
+                Annotation::Type(typ) => {
+                    return Err(Diagnostic::error(
+                        format!("Type {} doesn't support type arguments.", typ.value),
+                        value_range,
+                    ));
                 }
-                t => Err(Diagnostic::error(
-                    format!("{} can't take type arguments.", t),
-                    range,
-                ))?,
-            }
-        }
-        Expr::Name(n) => {
-            match scope.get(&n.id) {
-                Some(t) => Ok(t.typ),
-                None => {
-                    match n.id.as_str() {
-                        // TODO: Remove this hardcoded non-import
-                        "Any" => Ok(Type::Any),
-                        "Unknown" => Ok(Type::Unknown),
-                        "Union" => Ok(Type::Union(vec![])),
-                        "str" => Ok(Type::String),
-                        "int" => Ok(Type::Int),
-                        "float" => Ok(Type::Float),
-                        "bool" => Ok(Type::Bool),
-                        "None" => Ok(Type::None),
-                        "..." => Ok(Type::Ellipsis),
-                        unknown => Err(Diagnostic::new(
-                            format!("Name {} not found in scope.", unknown),
-                            DiagnosticType::Error,
-                            n.range(),
-                        )),
+            };
+            match *s.slice {
+                Expr::Tuple(tuple) => {
+                    for elem in tuple.elts.into_iter() {
+                        let arg = _synth_annotation(info, scope, Some(elem))?;
+                        value.arguments.push(arg);
                     }
                 }
-            }
+                other => {
+                    let slice = _synth_annotation(info, scope, Some(other))?;
+                    value.arguments.push(slice);
+                }
+            };
+            Ok(Annotation::PartialAnnotation(value))
         }
+        Expr::Name(n) => {
+            let range = n.range();
+            let typ = match scope.get(&n.id) {
+                Some(t) => t.typ,
+                None => {
+                    // Parse partial annotations
+                    if let Some(partial_annotation_type) = match n.id.as_str() {
+                        "Union" => Some(PartialAnnotationType::Union),
+                        "Literal" => Some(PartialAnnotationType::Literal),
+                        _ => None,
+                    } {
+                        return Ok(Annotation::PartialAnnotation(PartialAnnotation {
+                            annotation: partial_annotation_type,
+                            arguments: vec![],
+                            range,
+                        }));
+                    };
+
+                    // Parse regular types
+                    match n.id.as_str() {
+                        // TODO: Remove this hardcoded non-import
+                        "Any" => Type::Any,
+                        "Unknown" => Type::Unknown,
+                        "str" => Type::String,
+                        "int" => Type::Int,
+                        "float" => Type::Float,
+                        "bool" => Type::Bool,
+                        "None" => Type::None,
+                        "..." => Type::Ellipsis,
+                        unknown => {
+                            return Err(Diagnostic::new(
+                                format!("Name {} not found in scope.", unknown),
+                                DiagnosticType::Error,
+                                n.range(),
+                            ));
+                        }
+                    }
+                }
+            };
+            Ok(Annotation::Type(RangedType { range, value: typ }))
+        }
+        Expr::StringLiteral(l) => Ok(Annotation::Type(RangedType {
+            value: Type::Literal(TypeLiteral::StringLiteral(l.value.to_str().to_owned())),
+            range: l.range(),
+        })),
+        Expr::BytesLiteral(_) => unimplemented!("Bytes literal not supported."),
+        Expr::NumberLiteral(l) => {
+            let range = l.range();
+            let literal = match l.value {
+                Number::Int(i) => TypeLiteral::IntLiteral(i.as_i64().unwrap()),
+                Number::Float(i) => TypeLiteral::FloatLiteral(i.to_string()),
+                Number::Complex { real: _, imag: _ } => {
+                    unimplemented!("Complex numbers not supported.")
+                }
+            };
+            Ok(Annotation::Type(RangedType {
+                value: Type::Literal(literal),
+                range,
+            }))
+        }
+        Expr::BooleanLiteral(l) => Ok(Annotation::Type(RangedType {
+            value: Type::Literal(TypeLiteral::BooleanLiteral(l.value)),
+            range: l.range(),
+        })),
+        Expr::NoneLiteral(l) => Ok(Annotation::Type(RangedType {
+            value: Type::Literal(TypeLiteral::NoneLiteral),
+            range: l.range(),
+        })),
+        Expr::EllipsisLiteral(l) => Ok(Annotation::Type(RangedType {
+            value: Type::Literal(TypeLiteral::EllipsisLiteral),
+            range: l.range(),
+        })),
         e => unimplemented!("{:?}", e),
     }
 }
