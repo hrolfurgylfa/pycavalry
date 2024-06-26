@@ -37,6 +37,9 @@ pub fn is_subtype(a: &Type, b: &Type) -> bool {
         (Type::Any | Type::Unknown, _) => true,
         (_, Type::Any | Type::Unknown) => true,
         (Type::Int, Type::Float) => true,
+        (Type::Never, _) => false,
+        (Type::Union(union), b) => union.iter().all(|a| is_subtype(a, b)),
+        (a, Type::Union(union)) => union.iter().any(|b| is_subtype(a, b)),
         (Type::Function(f1), Type::Function(f2)) => {
             f1.args.len() == f2.args.len()
                 && f1
