@@ -85,8 +85,7 @@ pub fn collapse_union_types(mut types: Vec<Type>) -> Vec<Type> {
     types
 }
 pub fn union(mut types: Vec<Type>) -> Type {
-    types = flatten(types);
-    types = collapse_subtypes(types);
+    types = collapse_union_types(types);
 
     if types.len() == 0 {
         Type::Never
