@@ -14,13 +14,25 @@
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 use core::fmt;
-use std::{
-    io::{self, Write},
-    path::PathBuf,
-};
+use std::{borrow::Borrow, io, ops::Range, path::PathBuf};
 
+use ariadne::{Color, Config, Label, Report, Source};
 use clio::Output;
 use ruff_text_size::TextRange;
+
+pub type DiagReport<'a> = Report<'a, (&'a str, std::ops::Range<usize>)>;
+
+pub trait Diag {
+    fn print<'a>(&'a self, file_name: &'a str) -> DiagReport<'a>;
+
+    fn write(&self, f: &mut Output, file_name: &PathBuf, file: &str) -> io::Result<()> {
+        let file_name_cow = file_name.to_string_lossy();
+        let file_name: &str = file_name_cow.borrow();
+        self.print(file_name)
+            .write((file_name, Source::from(file)), f)
+    }
+}
+
 pub enum DiagnosticType {
     Info,
     Warning,
@@ -57,15 +69,37 @@ impl Diagnostic {
     pub fn info(body: String, range: TextRange) -> Diagnostic {
         Diagnostic::new(body, DiagnosticType::Info, range)
     }
+}
 
-    pub fn write(&self, f: &mut Output, file: &PathBuf) -> io::Result<()> {
-        writeln!(
-            f,
-            "{}:{:?}: {}: {}",
-            file.to_str().unwrap_or("Unknown"),
-            self.range.start(),
-            self.typ,
-            self.body
-        )
+impl Into<Box<dyn Diag>> for Diagnostic {
+    fn into(self) -> Box<dyn Diag> {
+        Box::new(self) as Box<dyn Diag>
+    }
+}
+
+pub fn convert_range(range: TextRange) -> Range<usize> {
+    range.start().to_usize()..range.end().to_usize()
+}
+
+impl Diag for Diagnostic {
+    fn print<'a>(&'a self, file_name: &'a str) -> DiagReport<'a> {
+        let main_color = match self.typ {
+            DiagnosticType::Error => Color::Red,
+            DiagnosticType::Warning => Color::Yellow,
+            DiagnosticType::Info => Color::Blue,
+        };
+        let kind = match self.typ {
+            DiagnosticType::Error => ariadne::ReportKind::Error,
+            DiagnosticType::Warning => ariadne::ReportKind::Warning,
+            DiagnosticType::Info => ariadne::ReportKind::Custom("Info", main_color),
+        };
+        Report::build(kind, file_name, self.range.start().to_usize())
+            .with_label(
+                Label::new((file_name, convert_range(self.range)))
+                    .with_message(&self.body)
+                    .with_color(main_color),
+            )
+            .with_config(Config::default().with_compact(false))
+            .finish()
     }
 }

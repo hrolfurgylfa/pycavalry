@@ -18,9 +18,9 @@ use ruff_python_ast::{Expr, ExprContext, Number, Stmt, StmtFunctionDef};
 use ruff_text_size::{Ranged, TextRange};
 use std::{fmt, mem};
 
-use crate::diagnostic::{Diagnostic, DiagnosticType};
-use crate::helpers::read_exact_from_file;
-use crate::scope::Scope;
+use crate::custom_diagnostics::RevealTypeDiag;
+use crate::diagnostic::{Diag, Diagnostic, DiagnosticType};
+use crate::scope::{Scope, ScopedType};
 use crate::state::{Info, StatementSynthData, StatementSynthDataReturn};
 use crate::types::{is_subtype, union, Class, Function, Type, TypeLiteral};
 
@@ -68,7 +68,7 @@ struct RangedType {
     value: Type,
 }
 
-fn verify_annotation(ann: Annotation) -> Result<Type, Diagnostic> {
+fn verify_annotation(ann: Annotation) -> Result<Type, Box<dyn Diag>> {
     match ann {
         Annotation::Type(t) => Ok(t.value),
         Annotation::PartialAnnotation(t) => match t.annotation {
@@ -76,7 +76,7 @@ fn verify_annotation(ann: Annotation) -> Result<Type, Diagnostic> {
                 t.arguments
                     .into_iter()
                     .map(verify_annotation)
-                    .collect::<Result<Vec<Type>, Diagnostic>>()?,
+                    .collect::<Result<Vec<Type>, Box<dyn Diag>>>()?,
             )),
             PartialAnnotationType::Literal => {
                 let mut literals = Vec::with_capacity(t.arguments.len());
@@ -88,14 +88,16 @@ fn verify_annotation(ann: Annotation) -> Result<Type, Diagnostic> {
                                 return Err(Diagnostic::error(
                                     format!("Expecting literal, found {}", other),
                                     t.range,
-                                ));
+                                )
+                                .into());
                             }
                         },
                         Annotation::PartialAnnotation(p) => {
                             return Err(Diagnostic::error(
                                 format!("Expecting literal, found {}", p.annotation),
                                 p.range,
-                            ));
+                            )
+                            .into());
                         }
                     }
                 }
@@ -109,7 +111,7 @@ fn synth_annotation(
     info: &Info,
     scope: &mut Scope,
     maybe_ast: Option<Expr>,
-) -> Result<Type, Diagnostic> {
+) -> Result<Type, Box<dyn Diag>> {
     let ann = _synth_annotation(info, scope, maybe_ast)?;
     verify_annotation(ann)
 }
@@ -118,7 +120,7 @@ fn _synth_annotation(
     info: &Info,
     scope: &mut Scope,
     maybe_ast: Option<Expr>,
-) -> Result<Annotation, Diagnostic> {
+) -> Result<Annotation, Box<dyn Diag>> {
     let Some(ast) = maybe_ast else {
         return Ok(Annotation::Type(RangedType {
             value: Type::Unknown,
@@ -136,7 +138,8 @@ fn _synth_annotation(
                     return Err(Diagnostic::error(
                         format!("Type {} doesn't support type arguments.", typ.value),
                         value_range,
-                    ));
+                    )
+                    .into());
                 }
             };
             match *s.slice {
@@ -187,7 +190,8 @@ fn _synth_annotation(
                                 format!("Name {} not found in scope.", unknown),
                                 DiagnosticType::Error,
                                 n.range(),
-                            ));
+                            )
+                            .into());
                         }
                     }
                 }
@@ -229,7 +233,7 @@ fn _synth_annotation(
     }
 }
 
-fn synth(info: &Info, scope: &mut Scope, ast: Expr) -> Result<Type, Diagnostic> {
+fn synth(info: &Info, scope: &mut Scope, ast: Expr) -> Result<Type, Box<dyn Diag>> {
     match ast {
         Expr::NoneLiteral(_) => Ok(Type::None),
         Expr::BooleanLiteral(l) => Ok(Type::Literal(TypeLiteral::BooleanLiteral(l.value))),
@@ -249,7 +253,8 @@ fn synth(info: &Info, scope: &mut Scope, ast: Expr) -> Result<Type, Diagnostic> 
                     format!("Name {} not found in scope.", name.id),
                     DiagnosticType::Error,
                     name.range,
-                ))
+                )
+                .into())
             }
         }
         Expr::Lambda(lambda) => {
@@ -270,35 +275,33 @@ fn synth(info: &Info, scope: &mut Scope, ast: Expr) -> Result<Type, Diagnostic> 
             let ret = Box::new(synth(info, scope, *lambda.body)?);
             Ok(Type::Function(Function::new(args, arg_names, ret)))
         }
-        Expr::Call(call) => {
+        Expr::Call(mut call) => {
             // Early handling for reveal_type
-            match *call.func.clone() {
-                Expr::Name(func_name) => {
-                    if func_name.id == "reveal_type" {
-                        let arg = call.arguments.args.into_iter().next().unwrap();
-                        let typ = synth(info, scope, arg.clone())?;
-                        return Err(Diagnostic::info(
-                            format!(
-                                "Type of \"{}\" is \"{}\"",
-                                read_exact_from_file(&info.file_content, arg.range()),
-                                typ
-                            ),
-                            func_name.range,
-                        ));
+            let func = match *call.func {
+                Expr::Name(func_name) if func_name.id == "reveal_type" => {
+                    // TODO: Find out why this isn't giving me a owned value
+                    let arg = call.arguments.args.into_iter().nth(0).unwrap();
+                    let arg_range = arg.range();
+                    let typ = synth(info, scope, arg.clone())?;
+                    return Err(RevealTypeDiag {
+                        range: arg_range,
+                        typ,
                     }
+                    .into());
                 }
-                _ => (),
-            }
+                func => func,
+            };
+            // Re-assemble the call, we didn't need it in the end
+            call.func = Box::new(func);
 
             // Regular call handling
             let callee_range = call.func.range();
             let call_range = call.range();
             let callee = match synth(info, scope, *call.func)? {
                 Type::Function(func) => func,
-                type_ => Err(Diagnostic::error(
-                    format!("{} not callable", type_),
-                    callee_range,
-                ))?,
+                type_ => {
+                    Err(Diagnostic::error(format!("{} not callable", type_), callee_range).into())?
+                }
             };
             if callee.args.len() != call.arguments.len() {
                 Err(Diagnostic::error(
@@ -308,7 +311,8 @@ fn synth(info: &Info, scope: &mut Scope, ast: Expr) -> Result<Type, Diagnostic> 
                         call.arguments.args.len()
                     ),
                     call_range,
-                ))?
+                )
+                .into())?
             }
             for (expected_arg, got_arg) in
                 callee.args.into_iter().zip(call.arguments.args.into_iter())
@@ -321,16 +325,13 @@ fn synth(info: &Info, scope: &mut Scope, ast: Expr) -> Result<Type, Diagnostic> 
     }
 }
 
-fn check(info: &Info, scope: &mut Scope, ast: Expr, typ: Type) -> Result<Type, Diagnostic> {
+fn check(info: &Info, scope: &mut Scope, ast: Expr, typ: Type) -> Result<Type, Box<dyn Diag>> {
     let range = ast.range();
     let synth_type = synth(info, scope, ast)?;
     if is_subtype(&synth_type, &typ) {
         Ok(synth_type)
     } else {
-        Err(Diagnostic::error(
-            format!("expected {typ}, got {synth_type}"),
-            range,
-        ))
+        Err(Diagnostic::error(format!("expected {typ}, got {synth_type}"), range).into())
     }
 }
 
@@ -339,12 +340,12 @@ fn check_func(
     data: &mut StatementSynthData,
     scope: &mut Scope,
     def: StmtFunctionDef,
-) -> (Function, Vec<Diagnostic>) {
-    let mut errors = vec![];
+) -> (Function, Vec<Box<dyn Diag>>) {
+    let mut errors: Vec<Box<dyn Diag>> = vec![];
     let expected_ret = match synth_annotation(info, scope, def.returns.map(|i| *i)) {
         Ok(t) => t,
         Err(e) => {
-            errors.push(e);
+            errors.push(e.into());
             Type::Unknown
         }
     };
@@ -357,7 +358,7 @@ fn check_func(
         let annotation = match synth_annotation(info, scope, arg.parameter.annotation.map(|i| *i)) {
             Ok(t) => t,
             Err(e) => {
-                errors.push(e);
+                errors.push(e.into());
                 Type::Unknown
             }
         };
@@ -368,7 +369,7 @@ fn check_func(
                     args.push(t);
                     arg_type_added = true;
                 }
-                Err(e) => errors.push(e),
+                Err(e) => errors.push(e.into()),
             };
         }
         if !arg_type_added {
@@ -409,10 +410,10 @@ pub fn check_statement(
     mut data: &mut StatementSynthData,
     scope: &mut Scope,
     stmt: Stmt,
-) -> Result<(), Vec<Diagnostic>> {
+) -> Result<(), Vec<Box<dyn Diag>>> {
     match stmt {
         Stmt::AnnAssign(ass) => {
-            let mut errors = vec![];
+            let mut errors: Vec<Box<dyn Diag>> = vec![];
             let annotation = match synth_annotation(info, scope, Some(*ass.annotation)) {
                 Ok(t) => t,
                 Err(e) => {
@@ -431,7 +432,7 @@ pub fn check_statement(
             match *ass.target {
                 Expr::Name(name) => {
                     assert_eq!(name.ctx, ExprContext::Store);
-                    scope.set(name.id, annotation);
+                    scope.set(name.id, ScopedType::locked(annotation));
                 }
                 node => panic!("Node {:?} not expected in type assignment.", node),
             }
@@ -442,11 +443,17 @@ pub fn check_statement(
             }
         }
         Stmt::Assign(ass) => {
-            let typ = synth(info, scope, *ass.value).map_err(|e| vec![e])?;
             for target in ass.targets {
                 match target {
                     Expr::Name(name) => {
                         assert_eq!(name.ctx, ExprContext::Store);
+                        let typ = match scope.get_top_ref(&name.id) {
+                            Some(scoped) if scoped.is_locked == true => {
+                                check(info, scope, *ass.value.clone(), scoped.typ.clone())
+                            }
+                            _ => synth(info, scope, *ass.value.clone()),
+                        }
+                        .map_err(|e| vec![e.into()])?;
                         scope.set(name.id, typ.clone());
                     }
                     node => panic!("Node {:?} not expected in assignment.", node),
@@ -455,7 +462,7 @@ pub fn check_statement(
             Ok(())
         }
         Stmt::Expr(expr) => {
-            synth(info, scope, *expr.value).map_err(|e| vec![e])?;
+            synth(info, scope, *expr.value).map_err(|e| vec![e.into()])?;
             Ok(())
         }
         Stmt::Return(ret) => {
@@ -463,13 +470,14 @@ pub fn check_statement(
                 return Err(vec![Diagnostic::error(
                     format!("Can't return outside of function."),
                     ret.range,
-                )]);
+                )
+                .into()]);
             };
             let ret = ret
                 .value
                 .map(|i| check(info, scope, *i, returns.annotation.clone()))
                 .unwrap_or(Ok(Type::None))
-                .map_err(|e| vec![e])?;
+                .map_err(|e| vec![e.into()])?;
             returns.found_types.push(ret);
             data.returns = Some(returns);
             // TODO: Add the new return value into returns

@@ -16,6 +16,7 @@
 
 use clap::Parser;
 use clio::{ClioPath, Output};
+use diagnostic::Diag;
 use ruff_python_parser::{parse, Mode};
 use scope::Scope;
 use state::{Info, StatementSynthData};
@@ -25,9 +26,11 @@ use std::{
     path::PathBuf,
     process::exit,
     string::FromUtf8Error,
+    sync::Arc,
 };
 use synth::check_statement;
 
+pub mod custom_diagnostics;
 pub mod diagnostic;
 pub mod helpers;
 pub mod scope;
@@ -78,7 +81,7 @@ impl From<ruff_python_parser::ParseError> for Error {
 fn main() -> Result<(), Error> {
     let mut opt = Opt::parse();
     let file_name = opt.file;
-    let file_content = String::from_utf8(read(&file_name)?)?;
+    let file_content = Arc::new(String::from_utf8(read(&file_name)?)?);
 
     // Parse the module with ruff
     let module = parse(&file_content, Mode::Module)?;
@@ -91,7 +94,7 @@ fn main() -> Result<(), Error> {
     }
 
     let mut scope = Scope::new();
-    let info = Info::new(file_name.clone(), file_content);
+    let info = Info::new(file_name.clone(), file_content.clone());
     let mut data = StatementSynthData::new(None);
     let statements = match module.into_syntax() {
         ruff_python_ast::Mod::Module(m) => m,
@@ -102,7 +105,7 @@ fn main() -> Result<(), Error> {
             Ok(()) => (),
             Err(errors) => {
                 for e in errors {
-                    e.write(&mut opt.output, &file_name)?;
+                    e.write(&mut opt.output, &file_name, &file_content)?;
                 }
             }
         }

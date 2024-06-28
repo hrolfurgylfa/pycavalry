@@ -13,7 +13,7 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-use std::path::PathBuf;
+use std::{path::PathBuf, sync::Arc};
 
 use crate::types::Type;
 
@@ -46,11 +46,11 @@ impl StatementSynthDataReturn {
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Default)]
 pub struct Info {
     pub file_name: PathBuf,
-    pub file_content: String,
+    pub file_content: Arc<String>,
 }
 
 impl Info {
-    pub fn new(file_name: PathBuf, file_content: String) -> Info {
+    pub fn new(file_name: PathBuf, file_content: Arc<String>) -> Info {
         Info {
             file_name,
             file_content,
