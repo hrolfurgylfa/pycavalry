@@ -16,7 +16,6 @@
 
 use clap::Parser;
 use clio::{ClioPath, Output};
-use diagnostic::Diag;
 use ruff_python_parser::{parse, Mode};
 use scope::Scope;
 use state::{Info, StatementSynthData};
