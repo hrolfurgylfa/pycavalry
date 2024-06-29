@@ -52,6 +52,7 @@ struct Opt {
     log_dir: ClioPath,
 }
 
+#[allow(dead_code)]
 #[derive(Debug)]
 enum Error {
     IoError(io::Error),
