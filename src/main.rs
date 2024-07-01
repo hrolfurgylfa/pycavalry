@@ -16,7 +16,7 @@
 
 use clap::Parser;
 use clio::{ClioPath, Output};
-use ruff_python_parser::{parse, Mode};
+use ruff_python_parser::{parse, typing::parse_type_annotation, Mode};
 use scope::Scope;
 use state::{Info, StatementSynthData};
 use std::{
@@ -80,8 +80,8 @@ impl From<ruff_python_parser::ParseError> for Error {
 
 fn main() -> Result<(), Error> {
     let mut opt = Opt::parse();
-    let file_name = opt.file;
-    let file_content = Arc::new(String::from_utf8(read(&file_name)?)?);
+    let file_name = Arc::new(opt.file);
+    let file_content = Arc::new(String::from_utf8(read(file_name.as_ref())?)?);
 
     // Parse the module with ruff
     let module = parse(&file_content, Mode::Module)?;

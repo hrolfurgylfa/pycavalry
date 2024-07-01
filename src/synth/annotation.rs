@@ -13,7 +13,7 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-use std::fmt;
+use std::{fmt, sync::Arc};
 
 use ruff_python_ast::{Expr, Number};
 use ruff_text_size::{Ranged, TextRange};
@@ -25,7 +25,7 @@ use crate::{
     types::{union, Type, TypeLiteral},
 };
 
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Debug, PartialEq)]
 enum Annotation {
     Type(RangedType),
     PartialAnnotation(PartialAnnotation),
@@ -56,14 +56,14 @@ impl fmt::Display for PartialAnnotationType {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Debug, PartialEq)]
 struct PartialAnnotation {
     range: TextRange,
     annotation: PartialAnnotationType,
     arguments: Vec<Annotation>,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Debug, PartialEq)]
 struct RangedType {
     range: TextRange,
     value: Type,
@@ -159,11 +159,12 @@ fn _synth_annotation(
         }
         Expr::Name(n) => {
             let range = n.range();
-            let typ = match scope.get(&n.id) {
+            let str = Arc::new(n.id);
+            let typ = match scope.get(&str) {
                 Some(t) => t.typ,
                 None => {
                     // Parse partial annotations
-                    if let Some(partial_annotation_type) = match n.id.as_str() {
+                    if let Some(partial_annotation_type) = match str.as_str() {
                         "Union" => Some(PartialAnnotationType::Union),
                         "Literal" => Some(PartialAnnotationType::Literal),
                         _ => None,
@@ -176,7 +177,7 @@ fn _synth_annotation(
                     };
 
                     // Parse regular types
-                    match n.id.as_str() {
+                    match str.as_str() {
                         // TODO: Remove this hardcoded non-import
                         "Any" => Type::Any,
                         "Unknown" => Type::Unknown,
@@ -190,7 +191,7 @@ fn _synth_annotation(
                             return Err(Diagnostic::new(
                                 format!("Name {} not found in scope.", unknown),
                                 DiagnosticType::Error,
-                                n.range(),
+                                range,
                             )
                             .into());
                         }

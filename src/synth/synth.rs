@@ -14,15 +14,16 @@
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 use core::panic;
-use ruff_python_ast::{Expr, ExprContext, Number, Stmt, StmtFunctionDef};
+use ruff_python_ast::{Expr, ExprContext, Number, Stmt};
 use ruff_text_size::Ranged;
 use std::mem;
+use std::sync::Arc;
 
 use crate::custom_diagnostics::RevealTypeDiag;
 use crate::diagnostic::{Diag, Diagnostic, DiagnosticType};
 use crate::scope::{Scope, ScopedType};
-use crate::state::{Info, StatementSynthData, StatementSynthDataReturn};
-use crate::types::{is_subtype, union, Class, Function, Type, TypeLiteral};
+use crate::state::{Info, PartialItem, StatementSynthData, StatementSynthDataReturn};
+use crate::types::{is_subtype, union, Class, Function, PartialFunction, Type, TypeLiteral};
 
 use super::synth_annotation;
 
@@ -39,11 +40,12 @@ fn synth(info: &Info, scope: &mut Scope, ast: Expr) -> Result<Type, Box<dyn Diag
             s.value.to_str().to_owned(),
         ))),
         Expr::Name(name) if name.ctx == ExprContext::Load => {
-            if let Some(scoped) = scope.get(&name.id) {
+            let name_str = Arc::new(name.id);
+            if let Some(scoped) = scope.get(&name_str) {
                 Ok(scoped.typ)
             } else {
                 Err(Diagnostic::new(
-                    format!("Name {} not found in scope.", name.id),
+                    format!("Name {} not found in scope.", name_str),
                     DiagnosticType::Error,
                     name.range,
                 )
@@ -52,7 +54,7 @@ fn synth(info: &Info, scope: &mut Scope, ast: Expr) -> Result<Type, Box<dyn Diag
         }
         Expr::Lambda(lambda) => {
             let mut args: Vec<Type> = vec![];
-            let mut arg_names: Vec<String> = vec![];
+            let mut arg_names = vec![];
             if let Some(params) = lambda.parameters {
                 for arg in params.args.into_iter() {
                     let ann = arg
@@ -62,7 +64,7 @@ fn synth(info: &Info, scope: &mut Scope, ast: Expr) -> Result<Type, Box<dyn Diag
                         .unwrap_or_else(|| Ok(Type::Unknown))?;
                     let param_name = arg.parameter.name.id;
                     args.push(ann);
-                    arg_names.push(param_name);
+                    arg_names.push(Arc::new(param_name));
                 }
             }
             let ret = Box::new(synth(info, scope, *lambda.body)?);
@@ -132,10 +134,10 @@ fn check_func(
     info: &Info,
     data: &mut StatementSynthData,
     scope: &mut Scope,
-    def: StmtFunctionDef,
-) -> (Function, Vec<Box<dyn Diag>>) {
+    func: &mut PartialFunction,
+) -> Vec<Box<dyn Diag>> {
     let mut errors: Vec<Box<dyn Diag>> = vec![];
-    let expected_ret = match synth_annotation(info, scope, def.returns.map(|i| *i)) {
+    let expected_ret = match synth_annotation(info, scope, func.ast.returns.clone().map(|i| *i)) {
         Ok(t) => t,
         Err(e) => {
             errors.push(e.into());
@@ -147,16 +149,17 @@ fn check_func(
     // Load function arguments
     let mut args = vec![];
     let mut arg_names = vec![];
-    for arg in def.parameters.args {
-        let annotation = match synth_annotation(info, scope, arg.parameter.annotation.map(|i| *i)) {
-            Ok(t) => t,
-            Err(e) => {
-                errors.push(e.into());
-                Type::Unknown
-            }
-        };
+    for arg in func.ast.parameters.args.iter() {
+        let annotation =
+            match synth_annotation(info, scope, arg.parameter.annotation.clone().map(|i| *i)) {
+                Ok(t) => t,
+                Err(e) => {
+                    errors.push(e.into());
+                    Type::Unknown
+                }
+            };
         let mut arg_type_added = false;
-        if let Some(default) = arg.default {
+        if let Some(default) = arg.default.clone() {
             match check(info, scope, *default, annotation.clone()) {
                 Ok(t) => {
                     args.push(t);
@@ -168,22 +171,21 @@ fn check_func(
         if !arg_type_added {
             args.push(annotation.clone());
         }
-        scope.set(arg.parameter.name.id.clone(), annotation);
-        arg_names.push(arg.parameter.name.id);
+        let arg_name = Arc::new(arg.parameter.name.id.clone());
+        scope.set(arg_name.clone(), annotation);
+        arg_names.push(arg_name);
     }
 
     // Get ready for synthasizing the statements
-    let mut func = Function {
-        args,
-        arg_names,
-        ret: Box::new(Type::Unknown),
-    };
+    func.args = Some(args);
+    func.arg_names = Some(arg_names);
+    func.ret = Some(Box::new(Type::Unknown));
     let new_ret_data = StatementSynthDataReturn::new(expected_ret);
     let prev_data = mem::replace(&mut data.returns, Some(new_ret_data));
 
     // Synth statements
-    for stmt in def.body {
-        match check_statement(info, data, scope, stmt) {
+    for stmt in func.ast.body.iter() {
+        match check_statement(info, data, scope, stmt.clone()) {
             Ok(_) => (),
             Err(e) => errors.extend(e),
         }
@@ -191,11 +193,11 @@ fn check_func(
 
     // Put the data back for the potential outer function
     let this_func_data = mem::replace(&mut data.returns, prev_data);
-    func.ret = Box::new(union(this_func_data.unwrap().found_types));
+    func.ret = Some(Box::new(union(this_func_data.unwrap().found_types)));
 
     scope.pop_scope();
 
-    (func, errors)
+    errors
 }
 
 pub fn check_statement(
@@ -225,7 +227,7 @@ pub fn check_statement(
             match *ass.target {
                 Expr::Name(name) => {
                     assert_eq!(name.ctx, ExprContext::Store);
-                    scope.set(name.id, ScopedType::locked(annotation));
+                    scope.set(Arc::new(name.id), ScopedType::locked(annotation));
                 }
                 node => panic!("Node {:?} not expected in type assignment.", node),
             }
@@ -240,14 +242,15 @@ pub fn check_statement(
                 match target {
                     Expr::Name(name) => {
                         assert_eq!(name.ctx, ExprContext::Store);
-                        let typ = match scope.get_top_ref(&name.id) {
+                        let name_str = Arc::new(name.id);
+                        let typ = match scope.get_top_ref(&name_str) {
                             Some(scoped) if scoped.is_locked == true => {
                                 check(info, scope, *ass.value.clone(), scoped.typ.clone())
                             }
                             _ => synth(info, scope, *ass.value.clone()),
                         }
                         .map_err(|e| vec![e.into()])?;
-                        scope.set(name.id, typ.clone());
+                        scope.set(name_str, typ.clone());
                     }
                     node => panic!("Node {:?} not expected in assignment.", node),
                 }
@@ -277,10 +280,24 @@ pub fn check_statement(
             Ok(())
         }
         Stmt::FunctionDef(def) => {
-            let func_name = def.name.id.clone();
+            let func_name = Arc::new(def.name.id.clone());
 
-            let (parsed_func, errors) = check_func(info, &mut data, scope, def);
-            scope.set(func_name, Type::Function(parsed_func));
+            let mut partial_func = PartialFunction {
+                ast: def,
+                args: None,
+                arg_names: None,
+                ret: None,
+            };
+            let errors = check_func(info, &mut data, scope, &mut partial_func);
+            let typ = match Function::try_from(partial_func) {
+                Ok(func) => Type::Function(func),
+                Err(func) => {
+                    data.partial_list
+                        .push_back(PartialItem::new(info.file_name.clone(), func_name.clone()));
+                    Type::PartialFunction(func)
+                }
+            };
+            scope.set(func_name, typ);
 
             if errors.len() > 0 {
                 Err(errors)
@@ -289,10 +306,10 @@ pub fn check_statement(
             }
         }
         Stmt::ClassDef(def) => {
-            let cls_name = def.name.id.clone();
+            let cls_name = Arc::new(def.name.id.clone());
             scope.set(
                 cls_name.clone(),
-                Type::Class(Class::new(cls_name, vec![], vec![])),
+                Type::Class(Class::new(cls_name.clone(), vec![], vec![])),
             );
             Ok(())
         }

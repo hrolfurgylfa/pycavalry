@@ -13,11 +13,11 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-use std::{collections::HashMap, iter};
+use std::{borrow::Borrow, collections::HashMap, iter, sync::Arc};
 
 use crate::types::Type;
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct ScopedType {
     pub typ: Type,
     pub is_locked: bool,
@@ -45,10 +45,11 @@ impl From<Type> for ScopedType {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct Scope {
-    global: HashMap<String, ScopedType>,
-    scopes: Vec<HashMap<String, ScopedType>>,
+    // builtin: Arc<HashMap<String, ScopedType>>,
+    global: HashMap<Arc<String>, ScopedType>,
+    scopes: Vec<HashMap<Arc<String>, ScopedType>>,
 }
 
 impl Scope {
@@ -58,32 +59,32 @@ impl Scope {
             scopes: Vec::new(),
         }
     }
-    fn top_scope(&self) -> &HashMap<String, ScopedType> {
+    fn top_scope(&self) -> &HashMap<Arc<String>, ScopedType> {
         self.scopes.last().unwrap_or(&self.global)
     }
-    fn top_scope_mut(&mut self) -> &mut HashMap<String, ScopedType> {
+    fn top_scope_mut(&mut self) -> &mut HashMap<Arc<String>, ScopedType> {
         self.scopes.last_mut().unwrap_or(&mut self.global)
     }
     fn all_scopes<'a>(
         &'a self,
     ) -> iter::Chain<
-        iter::Rev<std::slice::Iter<'a, HashMap<String, ScopedType>>>,
-        iter::Once<&HashMap<String, ScopedType>>,
+        iter::Rev<std::slice::Iter<'a, HashMap<Arc<String>, ScopedType>>>,
+        iter::Once<&HashMap<Arc<String>, ScopedType>>,
     > {
         self.scopes.iter().rev().chain(iter::once(&self.global))
     }
-    pub fn get_top_ref<'a>(&'a self, name: &str) -> Option<&'a ScopedType> {
+    pub fn get_top_ref<'a>(&'a self, name: &Arc<String>) -> Option<&'a ScopedType> {
         self.top_scope().get(name)
     }
     /// Get a variable from the top scope or None if that scope doesn't contain the provided
     /// variable
-    pub fn get_top(&self, name: &str) -> Option<ScopedType> {
+    pub fn get_top(&self, name: &Arc<String>) -> Option<ScopedType> {
         self.get_top_ref(name).map(|v| v.clone())
     }
-    pub fn get_top_is_locked(&self, name: &str) -> Option<bool> {
+    pub fn get_top_is_locked(&self, name: &Arc<String>) -> Option<bool> {
         self.get_top_ref(name).map(|i| i.is_locked)
     }
-    pub fn get_ref<'a>(&'a self, name: &str) -> Option<&'a ScopedType> {
+    pub fn get_ref<'a>(&'a self, name: &Arc<String>) -> Option<&'a ScopedType> {
         for scope in self.all_scopes() {
             let maybe_type = scope.get(name);
             if let Some(typ) = maybe_type {
@@ -94,13 +95,13 @@ impl Scope {
         None
     }
     /// Get a variable from any scope
-    pub fn get(&self, name: &str) -> Option<ScopedType> {
+    pub fn get(&self, name: &Arc<String>) -> Option<ScopedType> {
         self.get_ref(name).map(|i| i.clone())
     }
-    pub fn get_is_locked(&self, name: &str) -> Option<bool> {
+    pub fn get_is_locked(&self, name: &Arc<String>) -> Option<bool> {
         self.get_ref(name).map(|i| i.is_locked)
     }
-    pub fn set(&mut self, name: String, value: impl Into<ScopedType>) {
+    pub fn set(&mut self, name: Arc<String>, value: impl Into<ScopedType>) {
         self.top_scope_mut().insert(name, value.into());
     }
     pub fn add_scope(&mut self) {

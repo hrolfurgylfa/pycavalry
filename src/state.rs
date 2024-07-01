@@ -13,22 +13,38 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-use std::{path::PathBuf, sync::Arc};
+use std::{collections::VecDeque, path::PathBuf, sync::Arc};
 
 use crate::types::Type;
 
-#[derive(Clone, Debug, PartialEq, Eq, Hash, Default)]
+#[derive(Clone, Debug, PartialEq, Default)]
 pub struct StatementSynthData {
     pub returns: Option<StatementSynthDataReturn>,
+    pub partial_list: VecDeque<PartialItem>,
 }
 
 impl StatementSynthData {
     pub fn new(returns: Option<StatementSynthDataReturn>) -> StatementSynthData {
-        StatementSynthData { returns }
+        StatementSynthData {
+            partial_list: VecDeque::new(),
+            returns,
+        }
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Hash, Default)]
+#[derive(Clone, Debug, PartialEq)]
+pub struct PartialItem {
+    pub path: Arc<PathBuf>,
+    pub name: Arc<String>,
+}
+
+impl PartialItem {
+    pub fn new(path: Arc<PathBuf>, name: Arc<String>) -> PartialItem {
+        PartialItem { path, name }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Default)]
 pub struct StatementSynthDataReturn {
     pub annotation: Type,
     pub found_types: Vec<Type>,
@@ -45,12 +61,12 @@ impl StatementSynthDataReturn {
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Default)]
 pub struct Info {
-    pub file_name: PathBuf,
+    pub file_name: Arc<PathBuf>,
     pub file_content: Arc<String>,
 }
 
 impl Info {
-    pub fn new(file_name: PathBuf, file_content: Arc<String>) -> Info {
+    pub fn new(file_name: Arc<PathBuf>, file_content: Arc<String>) -> Info {
         Info {
             file_name,
             file_content,
