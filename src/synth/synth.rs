@@ -40,7 +40,7 @@ fn synth(info: &Info, scope: &mut Scope, ast: Expr) -> Type {
             Type::Literal(TypeLiteral::StringLiteral(s.value.to_str().to_owned()))
         }
         Expr::Name(name) if name.ctx == ExprContext::Load => {
-            let name_str = Arc::new(name.id);
+            let name_str = Arc::new(name.id.to_string());
             if let Some(scoped) = scope.get(&name_str) {
                 scoped.typ
             } else {
@@ -63,7 +63,7 @@ fn synth(info: &Info, scope: &mut Scope, ast: Expr) -> Type {
                         .unwrap_or(Type::Unknown);
                     let param_name = arg.parameter.name.id;
                     args.push(ann);
-                    arg_names.push(Arc::new(param_name));
+                    arg_names.push(Arc::new(param_name.to_string()));
                 }
             }
             let ret = Box::new(synth(info, scope, *lambda.body));
@@ -119,7 +119,7 @@ fn synth(info: &Info, scope: &mut Scope, ast: Expr) -> Type {
             let value = synth(info, scope, *attr.value);
             match value {
                 Type::Module(_, module) => module
-                    .get(&attr.attr.id)
+                    .get(&attr.attr.id.to_string())
                     .map(|t| t.typ.clone())
                     .unwrap_or(Type::Unknown),
                 typ => {
@@ -178,7 +178,7 @@ fn check_func(
         if !arg_type_added {
             args.push(annotation.clone());
         }
-        let arg_name = Arc::new(arg.parameter.name.id.clone());
+        let arg_name = Arc::new(arg.parameter.name.id.to_string());
         scope.set(arg_name.clone(), annotation);
         arg_names.push(arg_name);
     }
@@ -237,7 +237,10 @@ pub fn check_statement(
             match *ass.target {
                 Expr::Name(name) => {
                     assert_eq!(name.ctx, ExprContext::Store);
-                    scope.set(Arc::new(name.id), ScopedType::locked(annotation));
+                    scope.set(
+                        Arc::new(name.id.to_string()),
+                        ScopedType::locked(annotation),
+                    );
                 }
                 node => panic!("Node {:?} not expected in type assignment.", node),
             }
@@ -247,7 +250,7 @@ pub fn check_statement(
                 match target {
                     Expr::Name(name) => {
                         assert_eq!(name.ctx, ExprContext::Store);
-                        let name_str = Arc::new(name.id);
+                        let name_str = Arc::new(name.id.to_string());
                         let typ = match scope.get_top_ref(&name_str) {
                             Some(scoped) if scoped.is_locked == true => {
                                 check(info, scope, *ass.value.clone(), scoped.typ.clone())
@@ -278,7 +281,7 @@ pub fn check_statement(
             // TODO: Add the new return value into returns
         }
         Stmt::FunctionDef(def) => {
-            let func_name = Arc::new(def.name.id.clone());
+            let func_name = Arc::new(def.name.id.to_string());
 
             let mut partial_func = PartialFunction {
                 ast: def,
@@ -298,7 +301,7 @@ pub fn check_statement(
             scope.set(func_name, typ);
         }
         Stmt::ClassDef(def) => {
-            let cls_name = Arc::new(def.name.id.clone());
+            let cls_name = Arc::new(def.name.id.to_string());
             scope.set(
                 cls_name.clone(),
                 Type::Class(Class::new(cls_name.clone(), vec![], vec![])),
@@ -309,17 +312,23 @@ pub fn check_statement(
         Stmt::Import(import) => {
             for alias in import.names {
                 let module = load_module(&alias.name.id);
-                let name = Arc::new(alias.name.id);
+                let name = Arc::new(alias.name.id.to_string());
                 scope.set(
                     name.clone(),
-                    Type::Module(alias.asname.map(|i| Arc::new(i.id)).unwrap_or(name), module),
+                    Type::Module(
+                        alias
+                            .asname
+                            .map(|i| Arc::new(i.id.to_string()))
+                            .unwrap_or(name),
+                        module,
+                    ),
                 );
             }
         }
         Stmt::ImportFrom(import) => {
             let module = load_module(&import.module.expect("From import without module?"));
             for alias in import.names {
-                let Some(submodule) = module.get(&alias.name.id) else {
+                let Some(submodule) = module.get(&alias.name.id.to_string()) else {
                     info.reporter.error(
                         format!("Name \"{}\" not found in scope.", &alias.name.id),
                         alias.range,
@@ -327,7 +336,7 @@ pub fn check_statement(
                     continue;
                 };
 
-                let name = Arc::new(alias.name.id);
+                let name = Arc::new(alias.name.id.to_string());
                 scope.set(name.clone(), submodule.clone());
             }
         }

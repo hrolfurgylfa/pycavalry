@@ -172,7 +172,7 @@ fn _synth_annotation(
         }
         Expr::Name(n) => {
             let range = n.range();
-            let str = Arc::new(n.id);
+            let str = Arc::new(n.id.to_string());
             let typ = match scope.get(&str) {
                 Some(t) => t.typ,
                 None => {
