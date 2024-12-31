@@ -75,7 +75,7 @@ fn synth(info: &Info, scope: &mut Scope, ast: Expr) -> Result<Type, Box<dyn Diag
             let func = match *call.func {
                 Expr::Name(func_name) if func_name.id == "reveal_type" => {
                     // TODO: Find out why this isn't giving me a owned value
-                    let arg = call.arguments.args.into_iter().nth(0).unwrap();
+                    let arg = call.arguments.args.iter().nth(0).unwrap();
                     let arg_range = arg.range();
                     let typ = synth(info, scope, arg.clone())?;
                     return Err(RevealTypeDiag {
@@ -109,10 +109,8 @@ fn synth(info: &Info, scope: &mut Scope, ast: Expr) -> Result<Type, Box<dyn Diag
                 )
                 .into())?
             }
-            for (expected_arg, got_arg) in
-                callee.args.into_iter().zip(call.arguments.args.into_iter())
-            {
                 check(info, scope, got_arg.clone(), expected_arg)?;
+            for (expected_arg, got_arg) in callee.args.into_iter().zip(call.arguments.args.iter()) {
             }
             Ok(*callee.ret)
         }
