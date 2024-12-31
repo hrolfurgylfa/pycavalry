@@ -44,6 +44,7 @@ impl Ranged for Annotation {
 enum PartialAnnotationType {
     Union,
     Literal,
+    Tuple,
 }
 
 impl fmt::Display for PartialAnnotationType {
@@ -51,6 +52,7 @@ impl fmt::Display for PartialAnnotationType {
         let name = match *self {
             Self::Union => "Union",
             Self::Literal => "Literal",
+            Self::Tuple => "tuple",
         };
         write!(f, "{}", name)
     }
@@ -104,6 +106,12 @@ fn verify_annotation(ann: Annotation) -> Result<Type, Box<dyn Diag>> {
                 }
                 Ok(union(literals))
             }
+            PartialAnnotationType::Tuple => Ok(Type::Tuple(
+                t.arguments
+                    .into_iter()
+                    .map(verify_annotation)
+                    .collect::<Result<Vec<Type>, Box<dyn Diag>>>()?,
+            )),
         },
     }
 }
@@ -172,6 +180,7 @@ fn _synth_annotation(
                     if let Some(partial_annotation_type) = match str.as_str() {
                         "Union" => Some(PartialAnnotationType::Union),
                         "Literal" => Some(PartialAnnotationType::Literal),
+                        "Tuple" | "tuple" => Some(PartialAnnotationType::Tuple),
                         _ => None,
                     } {
                         return Some(Annotation::PartialAnnotation(PartialAnnotation {

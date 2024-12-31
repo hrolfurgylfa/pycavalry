@@ -15,7 +15,9 @@
 
 use core::fmt;
 use ruff_python_ast::{LiteralExpressionRef, Number, StmtFunctionDef};
-use std::{hash::Hash, sync::Arc};
+use std::{collections::HashMap, hash::Hash, sync::Arc};
+
+use crate::scope::ScopedType;
 
 fn write_iter<I, T, F>(f: &mut fmt::Formatter<'_>, vals: I, func: F) -> fmt::Result
 where
@@ -46,6 +48,7 @@ pub enum Type {
     Bool,
     None,
     Ellipsis,
+    Tuple(Vec<Type>),
 
     Literal(TypeLiteral),
     Function(Function),
@@ -53,6 +56,7 @@ pub enum Type {
     Class(Class),
 
     Union(Vec<Type>),
+    Module(Arc<String>, HashMap<Arc<String>, ScopedType>),
 }
 
 impl<'a> fmt::Display for Type {
@@ -67,6 +71,11 @@ impl<'a> fmt::Display for Type {
             Type::Bool => write!(f, "bool"),
             Type::None => write!(f, "None"),
             Type::Ellipsis => write!(f, "..."),
+            Type::Tuple(types) => {
+                write!(f, "tuple[")?;
+                write_iter(f, types.iter(), |f, t| write!(f, "{}", t))?;
+                write!(f, "]")
+            }
             Type::Literal(l) => write!(f, "{}", l),
             Type::Function(func) => write!(f, "{}", func),
             Type::PartialFunction(_) => write!(f, "Partial Func"),
@@ -84,6 +93,7 @@ impl<'a> fmt::Display for Type {
                 }
                 write!(f, "]")
             }
+            Type::Module(name, _) => write!(f, "module[{}]", name),
         }?;
         Ok(())
     }
@@ -149,7 +159,11 @@ pub struct Class {
 }
 
 impl Class {
-    pub fn new(name: Arc<String>, functions: Vec<Function>, parameters: Vec<(String, Type)>) -> Class {
+    pub fn new(
+        name: Arc<String>,
+        functions: Vec<Function>,
+        parameters: Vec<(String, Type)>,
+    ) -> Class {
         Class {
             name,
             functions,

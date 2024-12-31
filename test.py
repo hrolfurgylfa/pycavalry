@@ -14,16 +14,21 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 from typing import Literal, Union, reveal_type
+import typing
+import sys
 
 
-(lambda x, y, z: "asdf")(1, 2, 3)
+hello = (lambda x, y, z: "asdf")(1, 2, 3)
+
+tup: tuple[int, int, int] = (1, 2, "f")
+reveal_type(tup)
 
 a = lambda x, y, z: "asdf"
 b: Literal["str"] = "str"
 reveal_type(b)
+reveal_type(sys.version_info)
 b = "str2"
 b = "str3"
-reveal_type(b)
 reveal_type(a(1, 2, 3))
 
 
@@ -37,7 +42,10 @@ reveal_type(do)
 
 
 class Test:
-    pass
+    if 3 < 4:
+        pass
+    else:
+        pass
 
 
 reveal_type(Test)

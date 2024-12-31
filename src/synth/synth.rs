@@ -16,6 +16,7 @@
 use core::panic;
 use ruff_python_ast::{Expr, ExprContext, Number, Stmt};
 use ruff_text_size::Ranged;
+use std::collections::HashMap;
 use std::mem;
 use std::sync::Arc;
 
@@ -114,6 +115,29 @@ fn synth(info: &Info, scope: &mut Scope, ast: Expr) -> Type {
             }
             *callee.ret
         }
+        Expr::Attribute(attr) => {
+            let value = synth(info, scope, *attr.value);
+            match value {
+                Type::Module(_, module) => module
+                    .get(&attr.attr.id)
+                    .map(|t| t.typ.clone())
+                    .unwrap_or(Type::Unknown),
+                typ => {
+                    info.reporter.error(
+                        format!("Unknown attribute \"{}\" for {}", &attr.attr.id, typ),
+                        attr.range,
+                    );
+                    Type::Unknown
+                }
+            }
+        }
+        Expr::Tuple(tuple) => Type::Tuple(
+            tuple
+                .elts
+                .into_iter()
+                .map(|expr| synth(&info, scope, expr))
+                .collect(),
+        ),
         e => unimplemented!("Unknown expression for synth: {e:?}"),
     }
 }
@@ -176,6 +200,26 @@ fn check_func(
     func.ret = Some(Box::new(union(this_func_data.unwrap().found_types)));
 
     scope.pop_scope();
+}
+
+fn load_module(path: &str) -> HashMap<Arc<String>, ScopedType> {
+    let mut module = HashMap::new();
+
+    // Add any hardcoded extras to built in modules
+    match path {
+        "sys" => {
+            module.insert(
+                Arc::new("version_info".to_owned()),
+                ScopedType::new(Type::Tuple(vec![
+                    Type::Literal(TypeLiteral::IntLiteral(3)),
+                    Type::Literal(TypeLiteral::IntLiteral(13)),
+                ])),
+            );
+        }
+        _ => {}
+    }
+
+    module
 }
 
 pub fn check_statement(
@@ -262,8 +306,31 @@ pub fn check_statement(
         }
         Stmt::Pass(_) => (),
         // TODO: Implement imports
-        Stmt::Import(_) => (),
-        Stmt::ImportFrom(_) => (),
+        Stmt::Import(import) => {
+            for alias in import.names {
+                let module = load_module(&alias.name.id);
+                let name = Arc::new(alias.name.id);
+                scope.set(
+                    name.clone(),
+                    Type::Module(alias.asname.map(|i| Arc::new(i.id)).unwrap_or(name), module),
+                );
+            }
+        }
+        Stmt::ImportFrom(import) => {
+            let module = load_module(&import.module.expect("From import without module?"));
+            for alias in import.names {
+                let Some(submodule) = module.get(&alias.name.id) else {
+                    info.reporter.error(
+                        format!("Name \"{}\" not found in scope.", &alias.name.id),
+                        alias.range,
+                    );
+                    continue;
+                };
+
+                let name = Arc::new(alias.name.id);
+                scope.set(name.clone(), submodule.clone());
+            }
+        }
         node => panic!("Statement not yet supported: {:?}", node),
     }
 }

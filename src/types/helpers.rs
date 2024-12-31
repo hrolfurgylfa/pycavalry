@@ -49,6 +49,13 @@ pub fn is_subtype(a: &Type, b: &Type) -> bool {
                     .all(|(i, t1)| is_subtype(&f2.args[i], t1))
                 && is_subtype(&f1.ret, &f2.ret)
         }
+        (Type::Tuple(t1), Type::Tuple(t2)) => {
+            if t1.len() == t2.len() {
+                t1.iter().zip(t2.iter()).all(|(t1, t2)| is_subtype(t1, t2))
+            } else {
+                false
+            }
+        }
         _ => false,
     }
 }
