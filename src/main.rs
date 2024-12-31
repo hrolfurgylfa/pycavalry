@@ -96,19 +96,14 @@ fn main() -> Result<(), Error> {
     let mut scope = Scope::new();
     let info = Info::new(file_name.clone(), file_content.clone());
     let mut data = StatementSynthData::new(None);
-    let statements = match module.into_syntax() {
+    let module = match module.into_syntax() {
         ruff_python_ast::Mod::Module(m) => m,
         ruff_python_ast::Mod::Expression(_) => unreachable!(),
     };
-    for stmt in statements.body.into_iter() {
-        match check_statement(&info, &mut data, &mut scope, stmt) {
-            Ok(()) => (),
-            Err(errors) => {
-                for e in errors {
-                    e.write(&mut opt.output, &file_name, &file_content)?;
-                }
-            }
-        }
+    for stmt in module.body.into_iter() {
+        check_statement(&info, &mut data, &mut scope, stmt);
     }
+    info.reporter.flush(&info, &mut opt.output)?;
+
     Ok(())
 }

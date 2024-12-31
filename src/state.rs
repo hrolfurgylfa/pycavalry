@@ -13,9 +13,21 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-use std::{collections::VecDeque, path::PathBuf, sync::Arc};
+use std::{
+    collections::VecDeque,
+    fmt, hash, io,
+    os::unix::ffi::OsStrExt,
+    path::PathBuf,
+    sync::{Arc, Mutex},
+};
 
-use crate::types::Type;
+use clio::Output;
+use ruff_text_size::TextRange;
+
+use crate::{
+    diagnostic::{Diag, Diagnostic, DiagnosticType},
+    types::Type,
+};
 
 #[derive(Clone, Debug, PartialEq, Default)]
 pub struct StatementSynthData {
@@ -59,17 +71,69 @@ impl StatementSynthDataReturn {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Hash, Default)]
+#[derive(Clone, Default)]
+pub struct Reporter(Arc<Mutex<Vec<Box<dyn Diag>>>>);
+
+impl fmt::Debug for Reporter {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "Reporter")
+    }
+}
+
+impl Reporter {
+    pub fn info(&self, body: String, range: TextRange) {
+        self.add(Diagnostic::new(body, DiagnosticType::Info, range))
+    }
+    pub fn warning(&self, body: String, range: TextRange) {
+        self.add(Diagnostic::new(body, DiagnosticType::Warning, range))
+    }
+    pub fn error(&self, body: String, range: TextRange) {
+        self.add(Diagnostic::new(body, DiagnosticType::Error, range))
+    }
+    pub fn add(&self, err: impl Into<Box<dyn Diag>>) {
+        let mut errors = self.0.lock().unwrap();
+        errors.push(err.into());
+    }
+    pub fn extend(&self, new_errors: impl Into<Vec<Box<dyn Diag>>>) {
+        let mut errors = self.0.lock().unwrap();
+        errors.extend(new_errors.into());
+    }
+
+    pub fn flush(&self, info: &Info, output: &mut Output) -> io::Result<()> {
+        let errors = self.0.lock().unwrap();
+        for e in errors.iter() {
+            e.write(output, &info.file_name, &info.file_content)?
+        }
+        Ok(())
+    }
+}
+
+#[derive(Clone, Debug)]
 pub struct Info {
     pub file_name: Arc<PathBuf>,
     pub file_content: Arc<String>,
+    pub reporter: Reporter,
+}
+
+impl hash::Hash for Info {
+    fn hash<H: hash::Hasher>(&self, state: &mut H) {
+        state.write(&self.file_name.as_os_str().as_bytes());
+        state.write(&self.file_content.as_bytes());
+    }
+}
+
+impl PartialEq for Info {
+    fn eq(&self, other: &Self) -> bool {
+        self.file_name == other.file_name && self.file_content == other.file_content
+    }
 }
 
 impl Info {
-    pub fn new(file_name: Arc<PathBuf>, file_content: Arc<String>) -> Info {
+    pub fn new(file_name: Arc<PathBuf>, file_content: Arc<String>) -> Self {
         Info {
             file_name,
             file_content,
+            reporter: Reporter::default(),
         }
     }
 }

@@ -19,7 +19,7 @@ use ruff_python_ast::{Expr, Number};
 use ruff_text_size::{Ranged, TextRange};
 
 use crate::{
-    diagnostic::{Diag, Diagnostic, DiagnosticType},
+    diagnostic::{Diag, Diagnostic},
     scope::Scope,
     state::Info,
     types::{union, Type, TypeLiteral},
@@ -108,22 +108,27 @@ fn verify_annotation(ann: Annotation) -> Result<Type, Box<dyn Diag>> {
     }
 }
 
-pub fn synth_annotation(
-    info: &Info,
-    scope: &mut Scope,
-    maybe_ast: Option<Expr>,
-) -> Result<Type, Box<dyn Diag>> {
-    let ann = _synth_annotation(info, scope, maybe_ast)?;
-    verify_annotation(ann)
+pub fn synth_annotation(info: &Info, scope: &mut Scope, maybe_ast: Option<Expr>) -> Type {
+    let Some(ann) = _synth_annotation(info, scope, maybe_ast) else {
+        return Type::Unknown;
+    };
+
+    match verify_annotation(ann) {
+        Ok(typ) => typ,
+        Err(err) => {
+            info.reporter.add(err);
+            Type::Unknown
+        }
+    }
 }
 
 fn _synth_annotation(
     info: &Info,
     scope: &mut Scope,
     maybe_ast: Option<Expr>,
-) -> Result<Annotation, Box<dyn Diag>> {
+) -> Option<Annotation> {
     let Some(ast) = maybe_ast else {
-        return Ok(Annotation::Type(RangedType {
+        return Some(Annotation::Type(RangedType {
             value: Type::Unknown,
             range: TextRange::default(),
         }));
@@ -136,11 +141,11 @@ fn _synth_annotation(
             let mut value = match _synth_annotation(info, scope, Some(*s.value))? {
                 Annotation::PartialAnnotation(value) => value,
                 Annotation::Type(typ) => {
-                    return Err(Diagnostic::error(
+                    info.reporter.error(
                         format!("Type {} doesn't support type arguments.", typ.value),
                         value_range,
-                    )
-                    .into());
+                    );
+                    return None;
                 }
             };
             match *s.slice {
@@ -155,7 +160,7 @@ fn _synth_annotation(
                     value.arguments.push(slice);
                 }
             };
-            Ok(Annotation::PartialAnnotation(value))
+            Some(Annotation::PartialAnnotation(value))
         }
         Expr::Name(n) => {
             let range = n.range();
@@ -169,7 +174,7 @@ fn _synth_annotation(
                         "Literal" => Some(PartialAnnotationType::Literal),
                         _ => None,
                     } {
-                        return Ok(Annotation::PartialAnnotation(PartialAnnotation {
+                        return Some(Annotation::PartialAnnotation(PartialAnnotation {
                             annotation: partial_annotation_type,
                             arguments: vec![],
                             range,
@@ -188,19 +193,16 @@ fn _synth_annotation(
                         "None" => Type::None,
                         "..." => Type::Ellipsis,
                         unknown => {
-                            return Err(Diagnostic::new(
-                                format!("Name {} not found in scope.", unknown),
-                                DiagnosticType::Error,
-                                range,
-                            )
-                            .into());
+                            info.reporter
+                                .error(format!("Name \"{}\" not found in scope.", unknown), range);
+                            return None;
                         }
                     }
                 }
             };
-            Ok(Annotation::Type(RangedType { range, value: typ }))
+            Some(Annotation::Type(RangedType { range, value: typ }))
         }
-        Expr::StringLiteral(l) => Ok(Annotation::Type(RangedType {
+        Expr::StringLiteral(l) => Some(Annotation::Type(RangedType {
             value: Type::Literal(TypeLiteral::StringLiteral(l.value.to_str().to_owned())),
             range: l.range(),
         })),
@@ -214,20 +216,20 @@ fn _synth_annotation(
                     unimplemented!("Complex numbers not supported.")
                 }
             };
-            Ok(Annotation::Type(RangedType {
+            Some(Annotation::Type(RangedType {
                 value: Type::Literal(literal),
                 range,
             }))
         }
-        Expr::BooleanLiteral(l) => Ok(Annotation::Type(RangedType {
+        Expr::BooleanLiteral(l) => Some(Annotation::Type(RangedType {
             value: Type::Literal(TypeLiteral::BooleanLiteral(l.value)),
             range: l.range(),
         })),
-        Expr::NoneLiteral(l) => Ok(Annotation::Type(RangedType {
+        Expr::NoneLiteral(l) => Some(Annotation::Type(RangedType {
             value: Type::Literal(TypeLiteral::NoneLiteral),
             range: l.range(),
         })),
-        Expr::EllipsisLiteral(l) => Ok(Annotation::Type(RangedType {
+        Expr::EllipsisLiteral(l) => Some(Annotation::Type(RangedType {
             value: Type::Literal(TypeLiteral::EllipsisLiteral),
             range: l.range(),
         })),
