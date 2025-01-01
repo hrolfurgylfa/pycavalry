@@ -137,14 +137,14 @@ pub fn synth(info: &Info, scope: &mut Scope, ast: Expr) -> Type {
     }
 }
 
-pub fn check(info: &Info, scope: &mut Scope, ast: Expr, typ: Type) -> Type {
+pub fn check(info: &Info, scope: &mut Scope, ast: Expr, typ: Type) -> Option<Type> {
     let range = ast.range();
     let synth_type = synth(info, scope, ast);
     if is_subtype(&synth_type, &typ) {
-        synth_type
+        Some(synth_type)
     } else {
         info.reporter
             .error(format!("expected {typ}, got {synth_type}"), range);
-        Type::Unknown
+        None
     }
 }

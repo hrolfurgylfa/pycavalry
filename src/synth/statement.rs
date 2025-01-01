@@ -22,7 +22,7 @@ use std::sync::Arc;
 use crate::scope::{Scope, ScopedType};
 use crate::state::{Info, PartialItem, StatementSynthData, StatementSynthDataReturn};
 use crate::synth::synth;
-use crate::types::{union, Class, Function, PartialFunction, Type, TypeLiteral};
+use crate::types::{is_subtype, union, Class, Function, PartialFunction, Type, TypeLiteral};
 
 use super::{check, synth_annotation};
 
@@ -43,7 +43,7 @@ fn check_func(
             synth_annotation(info, scope, arg.parameter.annotation.clone().map(|i| *i));
         let mut arg_type_added = false;
         if let Some(default) = arg.default.clone() {
-            let t = check(info, scope, *default, annotation.clone());
+            let t = check(info, scope, *default, annotation.clone()).unwrap_or(Type::Unknown);
             args.push(t);
             arg_type_added = true;
         }
@@ -105,10 +105,16 @@ pub fn check_statement(info: &Info, data: &mut StatementSynthData, scope: &mut S
             match *ass.target {
                 Expr::Name(name) => {
                     assert_eq!(name.ctx, ExprContext::Store);
-                    scope.set(
-                        Arc::new(name.id.to_string()),
-                        ScopedType::locked(annotation),
-                    );
+                    let name_str = Arc::new(name.id.to_string());
+                    if let Some(scoped) = scope.get_top_ref(&name_str) {
+                        if scoped.is_locked && !is_subtype(&scoped.typ, &annotation) {
+                            info.reporter.error(
+                                format!("\"{0}\" is already defined as {1}, can't redefine as {2} since that isn't a subtype of {1}.", name_str, scoped.typ, annotation),
+                                ass.range,
+                            );
+                        }
+                    };
+                    scope.set(name_str, ScopedType::locked(annotation));
                 }
                 node => panic!("Node {:?} not expected in type assignment.", node),
             }
@@ -119,22 +125,19 @@ pub fn check_statement(info: &Info, data: &mut StatementSynthData, scope: &mut S
                     Expr::Name(name) => {
                         assert_eq!(name.ctx, ExprContext::Store);
                         let name_str = Arc::new(name.id.to_string());
-                        let mut skip_assignment = false;
                         let typ = match scope.get_top_ref(&name_str) {
+                            // You are allowed to reassign a variable to a different type, unless it is locked
                             Some(scoped) if scoped.is_locked => {
-                                let scoped_type = scoped.typ.clone();
                                 let checked_type =
                                     check(info, scope, *ass.value.clone(), scoped.typ.clone());
-                                if scoped_type != Type::Unknown && checked_type == Type::Unknown {
-                                    skip_assignment = true;
-                                }
-                                checked_type
+                                let Some(typ) = checked_type else {
+                                    return;
+                                };
+                                typ
                             }
                             _ => synth(info, scope, *ass.value.clone()),
                         };
-                        if !skip_assignment {
-                            scope.set(name_str, typ);
-                        }
+                        scope.set(name_str, typ);
                     }
                     node => panic!("Node {:?} not expected in assignment.", node),
                 }
@@ -151,7 +154,9 @@ pub fn check_statement(info: &Info, data: &mut StatementSynthData, scope: &mut S
             };
             let ret = ret
                 .value
-                .map(|i| check(info, scope, *i, returns.annotation.clone()))
+                .map(|i| {
+                    check(info, scope, *i, returns.annotation.clone()).unwrap_or(Type::Unknown)
+                })
                 .unwrap_or(Type::None);
             returns.found_types.push(ret);
             data.returns = Some(returns);

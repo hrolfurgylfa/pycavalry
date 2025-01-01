@@ -27,7 +27,7 @@ a = lambda x, y, z: "asdf"
 b: Literal["str"] = "str"
 reveal_type(b)
 reveal_type(sys.version_info)
-b = "str2"
+b: Literal["str2"] = "str2"
 b = "str3"
 reveal_type(a(1, 2, 3))
 
