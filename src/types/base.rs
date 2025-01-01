@@ -59,7 +59,7 @@ pub enum Type {
     Module(Arc<String>, HashMap<Arc<String>, ScopedType>),
 }
 
-impl<'a> fmt::Display for Type {
+impl fmt::Display for Type {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Type::Never => write!(f, "Never"),
@@ -220,7 +220,7 @@ impl fmt::Display for TypeLiteral {
     }
 }
 
-impl<'a> From<LiteralExpressionRef<'a>> for TypeLiteral {
+impl From<LiteralExpressionRef<'_>> for TypeLiteral {
     fn from(value: LiteralExpressionRef) -> Self {
         match value {
             LiteralExpressionRef::StringLiteral(s) => {

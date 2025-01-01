@@ -27,9 +27,9 @@ pub struct RevealTypeDiag {
     pub range: TextRange,
 }
 
-impl Into<Box<dyn Diag>> for RevealTypeDiag {
-    fn into(self) -> Box<dyn Diag> {
-        Box::new(self) as Box<dyn Diag>
+impl From<RevealTypeDiag> for Box<dyn Diag> {
+    fn from(val: RevealTypeDiag) -> Self {
+        Box::new(val)
     }
 }
 

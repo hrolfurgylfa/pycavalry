@@ -97,7 +97,7 @@ fn collapse_union_types(mut types: Vec<Type>) -> Vec<Type> {
 pub fn union(mut types: Vec<Type>) -> Type {
     types = collapse_union_types(types);
 
-    if types.len() == 0 {
+    if types.is_empty() {
         Type::Never
     } else if types.len() == 1 {
         types.pop().unwrap()

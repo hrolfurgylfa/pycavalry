@@ -14,7 +14,7 @@
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 use core::fmt;
-use std::{borrow::Borrow, io, ops::Range, path::PathBuf};
+use std::{borrow::Borrow, io, ops::Range, path::Path};
 
 use ariadne::{Color, Config, Label, Report, Source};
 use clio::Output;
@@ -25,7 +25,7 @@ pub type DiagReport<'a> = Report<'a, (&'a str, std::ops::Range<usize>)>;
 pub trait Diag {
     fn print<'a>(&'a self, file_name: &'a str) -> DiagReport<'a>;
 
-    fn write(&self, f: &mut Output, file_name: &PathBuf, file: &str) -> io::Result<()> {
+    fn write(&self, f: &mut Output, file_name: &Path, file: &str) -> io::Result<()> {
         let file_name_cow = file_name.to_string_lossy();
         let file_name: &str = file_name_cow.borrow();
         self.print(file_name)
@@ -71,9 +71,9 @@ impl Diagnostic {
     }
 }
 
-impl Into<Box<dyn Diag>> for Diagnostic {
-    fn into(self) -> Box<dyn Diag> {
-        Box::new(self) as Box<dyn Diag>
+impl From<Diagnostic> for Box<dyn Diag> {
+    fn from(val: Diagnostic) -> Self {
+        Box::new(val)
     }
 }
 

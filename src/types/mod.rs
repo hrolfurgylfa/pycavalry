@@ -14,7 +14,7 @@
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 mod helpers;
-mod types;
+mod base;
 
 pub use self::helpers::*;
-pub use self::types::*;
+pub use self::base::*;

@@ -45,11 +45,19 @@ impl From<Type> for ScopedType {
     }
 }
 
+type ScopeMap = HashMap<Arc<String>, ScopedType>;
+
 #[derive(Clone, Debug, PartialEq)]
 pub struct Scope {
     // builtin: Arc<HashMap<String, ScopedType>>,
-    global: HashMap<Arc<String>, ScopedType>,
-    scopes: Vec<HashMap<Arc<String>, ScopedType>>,
+    global: ScopeMap,
+    scopes: Vec<ScopeMap>,
+}
+
+impl Default for Scope {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl Scope {
@@ -59,18 +67,15 @@ impl Scope {
             scopes: Vec::new(),
         }
     }
-    fn top_scope(&self) -> &HashMap<Arc<String>, ScopedType> {
+    fn top_scope(&self) -> &ScopeMap {
         self.scopes.last().unwrap_or(&self.global)
     }
-    fn top_scope_mut(&mut self) -> &mut HashMap<Arc<String>, ScopedType> {
+    fn top_scope_mut(&mut self) -> &mut ScopeMap {
         self.scopes.last_mut().unwrap_or(&mut self.global)
     }
-    fn all_scopes<'a>(
-        &'a self,
-    ) -> iter::Chain<
-        iter::Rev<std::slice::Iter<'a, HashMap<Arc<String>, ScopedType>>>,
-        iter::Once<&HashMap<Arc<String>, ScopedType>>,
-    > {
+    fn all_scopes(
+        &self,
+    ) -> iter::Chain<iter::Rev<std::slice::Iter<ScopeMap>>, iter::Once<&ScopeMap>> {
         self.scopes.iter().rev().chain(iter::once(&self.global))
     }
     pub fn get_top_ref<'a>(&'a self, name: &Arc<String>) -> Option<&'a ScopedType> {
@@ -79,7 +84,7 @@ impl Scope {
     /// Get a variable from the top scope or None if that scope doesn't contain the provided
     /// variable
     pub fn get_top(&self, name: &Arc<String>) -> Option<ScopedType> {
-        self.get_top_ref(name).map(|v| v.clone())
+        self.get_top_ref(name).cloned()
     }
     pub fn get_top_is_locked(&self, name: &Arc<String>) -> Option<bool> {
         self.get_top_ref(name).map(|i| i.is_locked)
@@ -96,7 +101,7 @@ impl Scope {
     }
     /// Get a variable from any scope
     pub fn get(&self, name: &Arc<String>) -> Option<ScopedType> {
-        self.get_ref(name).map(|i| i.clone())
+        self.get_ref(name).cloned()
     }
     pub fn get_is_locked(&self, name: &Arc<String>) -> Option<bool> {
         self.get_ref(name).map(|i| i.is_locked)

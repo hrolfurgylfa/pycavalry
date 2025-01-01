@@ -22,7 +22,7 @@ use std::{
 use ruff_text_size::TextRange;
 
 pub fn read_exact_from_file(file: &str, range: TextRange) -> String {
-    return file[range.start().to_usize()..range.end().to_usize()].to_owned();
+    file[range.start().to_usize()..range.end().to_usize()].to_owned()
 }
 
 pub fn read_exact_from_file_name(file_name: &PathBuf, range: TextRange) -> String {

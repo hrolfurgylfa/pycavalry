@@ -81,14 +81,14 @@ impl fmt::Debug for Reporter {
 }
 
 impl Reporter {
-    pub fn info(&self, body: String, range: TextRange) {
-        self.add(Diagnostic::new(body, DiagnosticType::Info, range))
+    pub fn info(&self, body: impl Into<String>, range: TextRange) {
+        self.add(Diagnostic::new(body.into(), DiagnosticType::Info, range))
     }
-    pub fn warning(&self, body: String, range: TextRange) {
-        self.add(Diagnostic::new(body, DiagnosticType::Warning, range))
+    pub fn warning(&self, body: impl Into<String>, range: TextRange) {
+        self.add(Diagnostic::new(body.into(), DiagnosticType::Warning, range))
     }
-    pub fn error(&self, body: String, range: TextRange) {
-        self.add(Diagnostic::new(body, DiagnosticType::Error, range))
+    pub fn error(&self, body: impl Into<String>, range: TextRange) {
+        self.add(Diagnostic::new(body.into(), DiagnosticType::Error, range))
     }
     pub fn add(&self, err: impl Into<Box<dyn Diag>>) {
         let mut errors = self.0.lock().unwrap();
@@ -117,8 +117,8 @@ pub struct Info {
 
 impl hash::Hash for Info {
     fn hash<H: hash::Hasher>(&self, state: &mut H) {
-        state.write(&self.file_name.as_os_str().as_bytes());
-        state.write(&self.file_content.as_bytes());
+        state.write(self.file_name.as_os_str().as_bytes());
+        state.write(self.file_content.as_bytes());
     }
 }
 

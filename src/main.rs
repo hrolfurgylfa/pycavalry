@@ -16,7 +16,7 @@
 
 use clap::Parser;
 use clio::{ClioPath, Output};
-use ruff_python_parser::{parse, typing::parse_type_annotation, Mode};
+use ruff_python_parser::{parse, Mode};
 use scope::Scope;
 use state::{Info, StatementSynthData};
 use std::{
@@ -55,26 +55,26 @@ struct Opt {
 #[allow(dead_code)]
 #[derive(Debug)]
 enum Error {
-    IoError(io::Error),
-    FromUtf8Error(FromUtf8Error),
-    RuffParseError(ruff_python_parser::ParseError),
+    Io(io::Error),
+    FromUtf8(FromUtf8Error),
+    RuffParse(ruff_python_parser::ParseError),
 }
 
 impl From<io::Error> for Error {
     fn from(value: io::Error) -> Self {
-        Self::IoError(value)
+        Self::Io(value)
     }
 }
 
 impl From<FromUtf8Error> for Error {
     fn from(value: FromUtf8Error) -> Self {
-        Self::FromUtf8Error(value)
+        Self::FromUtf8(value)
     }
 }
 
 impl From<ruff_python_parser::ParseError> for Error {
     fn from(value: ruff_python_parser::ParseError) -> Self {
-        Self::RuffParseError(value)
+        Self::RuffParse(value)
     }
 }
 
@@ -86,7 +86,7 @@ fn main() -> Result<(), Error> {
     // Parse the module with ruff
     let module = parse(&file_content, Mode::Module)?;
     let errors = module.errors();
-    if errors.len() != 0 {
+    if !errors.is_empty() {
         for err in errors {
             writeln!(&mut opt.output, "{}", err)?;
         }
