@@ -29,8 +29,7 @@ use std::{
 };
 use synth::check_statement;
 
-pub mod custom_diagnostics;
-pub mod diagnostic;
+pub mod diagnostics;
 pub mod helpers;
 pub mod scope;
 pub mod state;

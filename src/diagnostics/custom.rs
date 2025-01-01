@@ -17,7 +17,7 @@ use ariadne::{Color, Fmt, Label, Report};
 use ruff_text_size::TextRange;
 
 use crate::{
-    diagnostic::{convert_range, Diag, DiagReport},
+    diagnostics::{convert_range, Diag, DiagReport},
     types::Type,
 };
 

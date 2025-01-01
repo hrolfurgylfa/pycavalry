@@ -25,7 +25,7 @@ use clio::Output;
 use ruff_text_size::TextRange;
 
 use crate::{
-    diagnostic::{Diag, Diagnostic, DiagnosticType},
+    diagnostics::{Diag, Diagnostic, DiagnosticType},
     types::Type,
 };
 

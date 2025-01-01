@@ -19,7 +19,7 @@ use ruff_python_ast::{Expr, Number};
 use ruff_text_size::{Ranged, TextRange};
 
 use crate::{
-    diagnostic::{Diag, Diagnostic},
+    diagnostics::{Diag, Diagnostic},
     scope::Scope,
     state::Info,
     types::{union, Type, TypeLiteral},
