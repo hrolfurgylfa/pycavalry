@@ -106,6 +106,10 @@ impl Reporter {
         }
         Ok(())
     }
+    pub fn len(&self) -> usize {
+        let errors = self.0.lock().unwrap();
+        errors.len()
+    }
 }
 
 #[derive(Clone, Debug)]

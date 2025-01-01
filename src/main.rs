@@ -102,7 +102,13 @@ fn main() -> Result<(), Error> {
     for stmt in module.body.into_iter() {
         check_statement(&info, &mut data, &mut scope, stmt);
     }
+    let error_count = info.reporter.len();
     info.reporter.flush(&info, &mut opt.output)?;
+    if error_count > 0 {
+        write!(opt.output, "Found {} errors\n", error_count)?;
+    } else {
+        write!(opt.output, "No errors found\n")?;
+    }
 
     Ok(())
 }
