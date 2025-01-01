@@ -119,13 +119,22 @@ pub fn check_statement(info: &Info, data: &mut StatementSynthData, scope: &mut S
                     Expr::Name(name) => {
                         assert_eq!(name.ctx, ExprContext::Store);
                         let name_str = Arc::new(name.id.to_string());
+                        let mut skip_assignment = false;
                         let typ = match scope.get_top_ref(&name_str) {
                             Some(scoped) if scoped.is_locked => {
-                                check(info, scope, *ass.value.clone(), scoped.typ.clone())
+                                let scoped_type = scoped.typ.clone();
+                                let checked_type =
+                                    check(info, scope, *ass.value.clone(), scoped.typ.clone());
+                                if scoped_type != Type::Unknown && checked_type == Type::Unknown {
+                                    skip_assignment = true;
+                                }
+                                checked_type
                             }
                             _ => synth(info, scope, *ass.value.clone()),
                         };
-                        scope.set(name_str, typ.clone());
+                        if !skip_assignment {
+                            scope.set(name_str, typ);
+                        }
                     }
                     node => panic!("Node {:?} not expected in assignment.", node),
                 }
