@@ -19,10 +19,11 @@ use std::collections::HashMap;
 use std::mem;
 use std::sync::Arc;
 
+use crate::diagnostics::custom::{CantReassignLockedDiag, NotInScopeDiag};
 use crate::scope::{Scope, ScopedType};
 use crate::state::{Info, PartialItem, StatementSynthData, StatementSynthDataReturn};
 use crate::synth::synth;
-use crate::types::{is_subtype, union, Class, Function, PartialFunction, Type, TypeLiteral};
+use crate::types::{union, Class, Function, PartialFunction, Type, TypeLiteral};
 
 use super::{check, synth_annotation};
 
@@ -78,7 +79,6 @@ fn load_module(path: &str) -> HashMap<Arc<String>, ScopedType> {
     let mut module = HashMap::new();
 
     // Add any hardcoded extras to built in modules
-    #[allow(clippy::single_match)]
     match path {
         "sys" => {
             module.insert(
@@ -87,6 +87,16 @@ fn load_module(path: &str) -> HashMap<Arc<String>, ScopedType> {
                     Type::Literal(TypeLiteral::IntLiteral(3)),
                     Type::Literal(TypeLiteral::IntLiteral(13)),
                 ])),
+            );
+        }
+        "typing" => {
+            module.insert(
+                Arc::new("reveal_type".to_owned()),
+                ScopedType::new(Type::Function(Function::new(
+                    vec![Type::Any],
+                    vec![Arc::new("obj".to_owned())],
+                    Box::new(Type::Any),
+                ))),
             );
         }
         _ => {}
@@ -107,11 +117,14 @@ pub fn check_statement(info: &Info, data: &mut StatementSynthData, scope: &mut S
                     assert_eq!(name.ctx, ExprContext::Store);
                     let name_str = Arc::new(name.id.to_string());
                     if let Some(scoped) = scope.get_top_ref(&name_str) {
-                        if scoped.is_locked && !is_subtype(&scoped.typ, &annotation) {
-                            info.reporter.error(
-                                format!("\"{0}\" is already defined as {1}, can't redefine as {2} since that isn't a subtype of {1}.", name_str, scoped.typ, annotation),
+                        if scoped.is_locked {
+                            info.reporter.add(CantReassignLockedDiag::new(
+                                scoped.typ.clone(),
+                                annotation.clone(),
+                                name_str.clone(),
                                 ass.range,
-                            );
+                            ));
+                            return;
                         }
                     };
                     scope.set(name_str, ScopedType::locked(annotation));
@@ -211,10 +224,11 @@ pub fn check_statement(info: &Info, data: &mut StatementSynthData, scope: &mut S
             let module = load_module(&import.module.expect("From import without module?"));
             for alias in import.names {
                 let Some(submodule) = module.get(&alias.name.id.to_string()) else {
-                    info.reporter.error(
-                        format!("Name \"{}\" not found in scope.", &alias.name.id),
+                    info.reporter.add(NotInScopeDiag::new(
+                        alias.name.id.to_string().into(),
                         alias.range,
-                    );
+                    ));
+
                     continue;
                 };
 
