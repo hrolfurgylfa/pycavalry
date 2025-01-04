@@ -16,3 +16,6 @@ ruff_python_ast = { path = "ruff/crates/ruff_python_ast" }
 ruff_python_parser = { path = "ruff/crates/ruff_python_parser" }
 replace_with = "0.1.7"
 
+[dev-dependencies] 
+indoc = "2"
+

@@ -110,6 +110,12 @@ impl Reporter {
         let errors = self.0.lock().unwrap();
         errors.len()
     }
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
+    pub fn errors(&self) -> Arc<Mutex<Vec<Box<dyn Diag>>>> {
+        self.0.clone()
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -129,6 +135,12 @@ impl hash::Hash for Info {
 impl PartialEq for Info {
     fn eq(&self, other: &Self) -> bool {
         self.file_name == other.file_name && self.file_content == other.file_content
+    }
+}
+
+impl Default for Info {
+    fn default() -> Self {
+        Self::new(Arc::new("unknown".into()), Arc::new("".into()))
     }
 }
 
