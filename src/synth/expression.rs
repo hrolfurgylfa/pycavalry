@@ -17,7 +17,7 @@ use ruff_python_ast::{Expr, ExprContext, Number};
 use ruff_text_size::Ranged;
 use std::sync::Arc;
 
-use crate::diagnostics::custom::RevealTypeDiag;
+use crate::diagnostics::custom::{ExpectedButGotDiag, NotInScopeDiag, RevealTypeDiag};
 use crate::scope::Scope;
 use crate::state::Info;
 use crate::types::{is_subtype, Function, Type, TypeLiteral};
@@ -39,10 +39,8 @@ pub fn synth(info: &Info, scope: &mut Scope, ast: Expr) -> Type {
             if let Some(scoped) = scope.get(&name_str) {
                 scoped.typ
             } else {
-                info.reporter.error(
-                    format!("Name \"{}\" not found in scope.", name_str),
-                    name.range,
-                );
+                info.reporter
+                    .add(NotInScopeDiag::new(name_str.clone(), name.range));
                 Type::Unknown
             }
         }
@@ -144,7 +142,7 @@ pub fn check(info: &Info, scope: &mut Scope, ast: Expr, typ: Type) -> Option<Typ
         Some(synth_type)
     } else {
         info.reporter
-            .error(format!("expected {typ}, got {synth_type}"), range);
+            .add(ExpectedButGotDiag::new(typ, synth_type, range));
         None
     }
 }

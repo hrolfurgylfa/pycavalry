@@ -14,15 +14,33 @@
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 use core::fmt;
-use std::{borrow::Borrow, io, ops::Range, path::Path};
+use std::{borrow::Borrow, fmt::Debug, io, ops::Range, path::Path};
 
-use ariadne::{Color, Config, Label, Report, Source};
+use ariadne::{Color, Config, Label, Report, ReportKind, Source};
 use clio::Output;
 use ruff_text_size::TextRange;
 
+use super::{dyn_compare::DynCompare, macros};
+
+pub fn type_to_color(diagnostic_type: &DiagnosticType) -> Color {
+    match diagnostic_type {
+        DiagnosticType::Error => Color::Red,
+        DiagnosticType::Warning => Color::Yellow,
+        DiagnosticType::Info => Color::Blue,
+    }
+}
+
+pub fn type_to_kind(diagnostic_type: &DiagnosticType) -> ReportKind<'static> {
+    match diagnostic_type {
+        DiagnosticType::Error => ariadne::ReportKind::Error,
+        DiagnosticType::Warning => ariadne::ReportKind::Warning,
+        DiagnosticType::Info => ariadne::ReportKind::Custom("Info", type_to_color(diagnostic_type)),
+    }
+}
+
 pub type DiagReport<'a> = Report<'a, (&'a str, std::ops::Range<usize>)>;
 
-pub trait Diag {
+pub trait Diag: DynCompare + Debug {
     fn print<'a>(&'a self, file_name: &'a str) -> DiagReport<'a>;
 
     fn write(&self, f: &mut Output, file_name: &Path, file: &str) -> io::Result<()> {
@@ -33,6 +51,13 @@ pub trait Diag {
     }
 }
 
+impl PartialEq<dyn Diag> for dyn Diag {
+    fn eq(&self, other: &dyn Diag) -> bool {
+        self.as_dyn_compare() == other.as_dyn_compare()
+    }
+}
+
+#[derive(Debug, PartialEq)]
 pub enum DiagnosticType {
     Info,
     Warning,
@@ -49,6 +74,7 @@ impl fmt::Display for DiagnosticType {
     }
 }
 
+#[derive(Debug, PartialEq)]
 pub struct Diagnostic {
     body: String,
     typ: DiagnosticType,
@@ -71,11 +97,7 @@ impl Diagnostic {
     }
 }
 
-impl From<Diagnostic> for Box<dyn Diag> {
-    fn from(val: Diagnostic) -> Self {
-        Box::new(val)
-    }
-}
+macros::impl_diagnostic_to_box!(Diagnostic);
 
 pub fn convert_range(range: TextRange) -> Range<usize> {
     range.start().to_usize()..range.end().to_usize()
@@ -83,16 +105,8 @@ pub fn convert_range(range: TextRange) -> Range<usize> {
 
 impl Diag for Diagnostic {
     fn print<'a>(&'a self, file_name: &'a str) -> DiagReport<'a> {
-        let main_color = match self.typ {
-            DiagnosticType::Error => Color::Red,
-            DiagnosticType::Warning => Color::Yellow,
-            DiagnosticType::Info => Color::Blue,
-        };
-        let kind = match self.typ {
-            DiagnosticType::Error => ariadne::ReportKind::Error,
-            DiagnosticType::Warning => ariadne::ReportKind::Warning,
-            DiagnosticType::Info => ariadne::ReportKind::Custom("Info", main_color),
-        };
+        let main_color = type_to_color(&self.typ);
+        let kind = type_to_kind(&self.typ);
         Report::build(kind, file_name, self.range.start().to_usize())
             .with_label(
                 Label::new((file_name, convert_range(self.range)))

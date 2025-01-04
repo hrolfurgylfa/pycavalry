@@ -19,7 +19,7 @@ use ruff_python_ast::{Expr, Number};
 use ruff_text_size::{Ranged, TextRange};
 
 use crate::{
-    diagnostics::{Diag, Diagnostic},
+    diagnostics::{custom::NotInScopeDiag, Diag, Diagnostic},
     scope::Scope,
     state::Info,
     types::{union, Type, TypeLiteral},
@@ -203,7 +203,7 @@ fn _synth_annotation(
                         "..." => Type::Ellipsis,
                         unknown => {
                             info.reporter
-                                .error(format!("Name \"{}\" not found in scope.", unknown), range);
+                                .add(NotInScopeDiag::new(unknown.to_owned().into(), range));
                             return None;
                         }
                     }
