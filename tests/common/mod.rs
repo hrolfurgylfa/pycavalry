@@ -23,6 +23,7 @@ use ruff_python_parser::{parse, Mode};
 use ruff_text_size::{TextRange, TextSize};
 
 /// Shorthand to quickly create an **a**rc **st**ring.
+#[allow(dead_code)]
 pub fn ars(s: impl Into<String>) -> Arc<String> {
     Arc::new(s.into())
 }
