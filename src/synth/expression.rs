@@ -20,32 +20,32 @@ use std::sync::Arc;
 use crate::diagnostics::custom::{ExpectedButGotDiag, NotInScopeDiag, RevealTypeDiag};
 use crate::scope::Scope;
 use crate::state::Info;
-use crate::types::{is_subtype, Function, Type, TypeLiteral};
+use crate::types::{is_subtype, Function, TType, Type, TypeLiteral};
 
-pub fn synth(info: &Info, scope: &mut Scope, ast: Expr) -> Type {
+pub fn synth(info: &Info, scope: &mut Scope, ast: Expr) -> TType {
     match ast {
-        Expr::NoneLiteral(_) => Type::None,
-        Expr::BooleanLiteral(l) => Type::Literal(TypeLiteral::BooleanLiteral(l.value)),
+        Expr::NoneLiteral(_) => TType::new(Type::None),
+        Expr::BooleanLiteral(l) => Type::Literal(TypeLiteral::BooleanLiteral(l.value)).into(),
         Expr::NumberLiteral(n) => match n.value {
-            Number::Int(l) => Type::Literal(TypeLiteral::IntLiteral(l.as_i64().unwrap())),
-            Number::Float(l) => Type::Literal(TypeLiteral::FloatLiteral(l.to_string())),
+            Number::Int(l) => Type::Literal(TypeLiteral::IntLiteral(l.as_i64().unwrap())).into(),
+            Number::Float(l) => Type::Literal(TypeLiteral::FloatLiteral(l.to_string())).into(),
             Number::Complex { real: _, imag: _ } => unimplemented!(),
         },
         Expr::StringLiteral(s) => {
-            Type::Literal(TypeLiteral::StringLiteral(s.value.to_str().to_owned()))
+            Type::Literal(TypeLiteral::StringLiteral(s.value.to_str().to_owned())).into()
         }
         Expr::Name(name) if name.ctx == ExprContext::Load => {
             let name_str = Arc::new(name.id.to_string());
             if let Some(scoped) = scope.get(&name_str) {
-                scoped.typ
+                scoped.typ.clone()
             } else {
                 info.reporter
                     .add(NotInScopeDiag::new(name_str.clone(), name.range));
-                Type::Unknown
+                Type::Unknown.into()
             }
         }
         Expr::Lambda(lambda) => {
-            let mut args: Vec<Type> = vec![];
+            let mut args: Vec<TType> = vec![];
             let mut arg_names = vec![];
             if let Some(params) = lambda.parameters {
                 for arg in params.args.into_iter() {
@@ -53,14 +53,14 @@ pub fn synth(info: &Info, scope: &mut Scope, ast: Expr) -> Type {
                         .parameter
                         .annotation
                         .map(|a| synth(info, scope, *a))
-                        .unwrap_or(Type::Unknown);
+                        .unwrap_or(Type::Unknown.into());
                     let param_name = arg.parameter.name.id;
                     args.push(ann);
-                    arg_names.push(Arc::new(param_name.to_string()));
+                    arg_names.push(param_name.to_string());
                 }
             }
-            let ret = Box::new(synth(info, scope, *lambda.body));
-            Type::Function(Function::new(args, arg_names, ret))
+            let ret = synth(info, scope, *lambda.body);
+            Type::Function(Function::new(args, arg_names, ret)).into()
         }
         Expr::Call(mut call) => {
             // Early handling for reveal_type
@@ -74,7 +74,7 @@ pub fn synth(info: &Info, scope: &mut Scope, ast: Expr) -> Type {
                         range: arg_range,
                         typ,
                     });
-                    return Type::Unknown;
+                    return Type::Unknown.into();
                 }
                 func => func,
             };
@@ -84,12 +84,13 @@ pub fn synth(info: &Info, scope: &mut Scope, ast: Expr) -> Type {
             // Regular call handling
             let callee_range = call.func.range();
             let call_range = call.range();
-            let callee = match synth(info, scope, *call.func) {
+            let typ = synth(info, scope, *call.func);
+            let callee = match typ.as_ref() {
                 Type::Function(func) => func,
                 type_ => {
                     info.reporter
                         .error(format!("{} not callable", type_), callee_range);
-                    return Type::Unknown;
+                    return Type::Unknown.into();
                 }
             };
             if callee.args.len() != call.arguments.len() {
@@ -101,26 +102,28 @@ pub fn synth(info: &Info, scope: &mut Scope, ast: Expr) -> Type {
                     ),
                     call_range,
                 );
-                return Type::Unknown;
+                return Type::Unknown.into();
             }
-            for (expected_arg, got_arg) in callee.args.into_iter().zip(call.arguments.args.iter()) {
+            for (expected_arg, got_arg) in
+                callee.args.iter().cloned().zip(call.arguments.args.iter())
+            {
                 check(info, scope, got_arg.clone(), expected_arg);
             }
-            *callee.ret
+            callee.ret.clone()
         }
         Expr::Attribute(attr) => {
             let value = synth(info, scope, *attr.value);
-            match value {
+            match value.as_ref() {
                 Type::Module(_, module) => module
                     .get(&attr.attr.id.to_string())
                     .map(|t| t.typ.clone())
-                    .unwrap_or(Type::Unknown),
+                    .unwrap_or(Type::Unknown.into()),
                 typ => {
                     info.reporter.error(
                         format!("Unknown attribute \"{}\" for {}", &attr.attr.id, typ),
                         attr.range,
                     );
-                    Type::Unknown
+                    Type::Unknown.into()
                 }
             }
         }
@@ -130,12 +133,13 @@ pub fn synth(info: &Info, scope: &mut Scope, ast: Expr) -> Type {
                 .into_iter()
                 .map(|expr| synth(info, scope, expr))
                 .collect(),
-        ),
+        )
+        .into(),
         e => unimplemented!("Unknown expression for synth: {e:?}"),
     }
 }
 
-pub fn check(info: &Info, scope: &mut Scope, ast: Expr, typ: Type) -> Option<Type> {
+pub fn check(info: &Info, scope: &mut Scope, ast: Expr, typ: TType) -> Option<TType> {
     let range = ast.range();
     let synth_type = synth(info, scope, ast);
     if is_subtype(&synth_type, &typ) {

@@ -15,23 +15,25 @@
 
 use std::{collections::HashMap, iter, sync::Arc};
 
-use crate::types::Type;
+use gc::{Finalize, Trace};
 
-#[derive(Clone, Debug, PartialEq)]
+use crate::{types::TType, Type};
+
+#[derive(Clone, Debug, PartialEq, Trace, Finalize)]
 pub struct ScopedType {
-    pub typ: Type,
+    pub typ: TType,
     pub is_locked: bool,
 }
 
 impl ScopedType {
-    pub fn new(typ: Type) -> ScopedType {
+    pub fn new(typ: TType) -> ScopedType {
         ScopedType {
             typ,
             is_locked: false,
         }
     }
 
-    pub fn locked(typ: Type) -> ScopedType {
+    pub fn locked(typ: TType) -> ScopedType {
         ScopedType {
             typ,
             is_locked: true,
@@ -39,9 +41,15 @@ impl ScopedType {
     }
 }
 
+impl From<TType> for ScopedType {
+    fn from(value: TType) -> Self {
+        Self::new(value)
+    }
+}
+
 impl From<Type> for ScopedType {
     fn from(value: Type) -> Self {
-        Self::new(value)
+        Self::new(value.into())
     }
 }
 

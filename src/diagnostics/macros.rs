@@ -20,8 +20,8 @@ macro_rules! custom_diagnostic {
         }
 
         impl $typ {
-            pub fn new($($prop: $prop_typ,)* range: TextRange) -> Self {
-                Self { $($prop,)* range }
+            pub fn new($($prop: impl Into<$prop_typ>,)* range: TextRange) -> Self {
+                Self { $($prop: $prop.into(),)* range }
             }
         }
 

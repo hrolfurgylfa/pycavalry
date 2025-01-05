@@ -24,7 +24,7 @@ pub use diagnostics::{custom::*, Diag, Diagnostic, DiagnosticType};
 pub use scope::{Scope, ScopedType};
 pub use state::Info;
 pub use synth::{check_statement, synth, synth_annotation};
-pub use types::{Type, TypeLiteral};
+pub use types::{TType, Type, TypeLiteral};
 
 mod diagnostics;
 mod scope;

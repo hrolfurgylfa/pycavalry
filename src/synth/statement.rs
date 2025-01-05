@@ -44,22 +44,23 @@ fn check_func(
             synth_annotation(info, scope, arg.parameter.annotation.clone().map(|i| *i));
         let mut arg_type_added = false;
         if let Some(default) = arg.default.clone() {
-            let t = check(info, scope, *default, annotation.clone()).unwrap_or(Type::Unknown);
+            let t =
+                check(info, scope, *default, annotation.clone()).unwrap_or(Type::Unknown.into());
             args.push(t);
             arg_type_added = true;
         }
         if !arg_type_added {
             args.push(annotation.clone());
         }
-        let arg_name = Arc::new(arg.parameter.name.id.to_string());
-        scope.set(arg_name.clone(), annotation);
+        let arg_name = arg.parameter.name.id.to_string();
+        scope.set(Arc::new(arg_name.clone()), annotation);
         arg_names.push(arg_name);
     }
 
     // Get ready for synthasizing the statements
     func.args = Some(args);
     func.arg_names = Some(arg_names);
-    func.ret = Some(Box::new(Type::Unknown));
+    func.ret = Some(Type::Unknown.into());
     let new_ret_data = StatementSynthDataReturn::new(expected_ret);
     let prev_data = mem::replace(&mut data.returns, Some(new_ret_data));
 
@@ -70,33 +71,39 @@ fn check_func(
 
     // Put the data back for the potential outer function
     let this_func_data = mem::replace(&mut data.returns, prev_data);
-    func.ret = Some(Box::new(union(this_func_data.unwrap().found_types)));
+    func.ret = Some(union(this_func_data.unwrap().found_types));
 
     scope.pop_scope();
 }
 
-fn load_module(path: &str) -> HashMap<Arc<String>, ScopedType> {
+fn load_module(path: &str) -> HashMap<String, ScopedType> {
     let mut module = HashMap::new();
 
     // Add any hardcoded extras to built in modules
     match path {
         "sys" => {
             module.insert(
-                Arc::new("version_info".to_owned()),
-                ScopedType::new(Type::Tuple(vec![
-                    Type::Literal(TypeLiteral::IntLiteral(3)),
-                    Type::Literal(TypeLiteral::IntLiteral(13)),
-                ])),
+                "version_info".to_owned(),
+                ScopedType::new(
+                    Type::Tuple(vec![
+                        Type::Literal(TypeLiteral::IntLiteral(3)).into(),
+                        Type::Literal(TypeLiteral::IntLiteral(13)).into(),
+                    ])
+                    .into(),
+                ),
             );
         }
         "typing" => {
             module.insert(
-                Arc::new("reveal_type".to_owned()),
-                ScopedType::new(Type::Function(Function::new(
-                    vec![Type::Any],
-                    vec![Arc::new("obj".to_owned())],
-                    Box::new(Type::Any),
-                ))),
+                "reveal_type".to_owned(),
+                ScopedType::new(
+                    Type::Function(Function::new(
+                        vec![Type::Any.into()],
+                        vec!["obj".to_owned()],
+                        Type::Any.into(),
+                    ))
+                    .into(),
+                ),
             );
         }
         _ => {}
@@ -168,9 +175,10 @@ pub fn check_statement(info: &Info, data: &mut StatementSynthData, scope: &mut S
             let ret = ret
                 .value
                 .map(|i| {
-                    check(info, scope, *i, returns.annotation.clone()).unwrap_or(Type::Unknown)
+                    check(info, scope, *i, returns.annotation.clone())
+                        .unwrap_or(Type::Unknown.into())
                 })
-                .unwrap_or(Type::None);
+                .unwrap_or(Type::None.into());
             returns.found_types.push(ret);
             data.returns = Some(returns);
             // TODO: Add the new return value into returns
@@ -196,10 +204,10 @@ pub fn check_statement(info: &Info, data: &mut StatementSynthData, scope: &mut S
             scope.set(func_name, typ);
         }
         Stmt::ClassDef(def) => {
-            let cls_name = Arc::new(def.name.id.to_string());
+            let cls_name = def.name.id.to_string();
             scope.set(
-                cls_name.clone(),
-                Type::Class(Class::new(cls_name.clone(), vec![], vec![])),
+                Arc::new(cls_name.clone()),
+                Type::Class(Class::new(cls_name, vec![], vec![])),
             );
         }
         Stmt::Pass(_) => (),
@@ -207,14 +215,11 @@ pub fn check_statement(info: &Info, data: &mut StatementSynthData, scope: &mut S
         Stmt::Import(import) => {
             for alias in import.names {
                 let module = load_module(&alias.name.id);
-                let name = Arc::new(alias.name.id.to_string());
+                let name = alias.name.id.to_string();
                 scope.set(
-                    name.clone(),
+                    Arc::new(name.clone()),
                     Type::Module(
-                        alias
-                            .asname
-                            .map(|i| Arc::new(i.id.to_string()))
-                            .unwrap_or(name),
+                        alias.asname.map(|i| i.id.to_string()).unwrap_or(name),
                         module,
                     ),
                 );
@@ -224,10 +229,8 @@ pub fn check_statement(info: &Info, data: &mut StatementSynthData, scope: &mut S
             let module = load_module(&import.module.expect("From import without module?"));
             for alias in import.names {
                 let Some(submodule) = module.get(&alias.name.id.to_string()) else {
-                    info.reporter.add(NotInScopeDiag::new(
-                        alias.name.id.to_string().into(),
-                        alias.range,
-                    ));
+                    info.reporter
+                        .add(NotInScopeDiag::new(alias.name.id.to_string(), alias.range));
 
                     continue;
                 };

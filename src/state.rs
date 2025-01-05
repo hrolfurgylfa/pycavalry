@@ -26,7 +26,7 @@ use ruff_text_size::TextRange;
 
 use crate::{
     diagnostics::{Diag, Diagnostic, DiagnosticType},
-    types::Type,
+    types::TType,
 };
 
 #[derive(Clone, Debug, PartialEq, Default)]
@@ -58,12 +58,12 @@ impl PartialItem {
 
 #[derive(Clone, Debug, PartialEq, Default)]
 pub struct StatementSynthDataReturn {
-    pub annotation: Type,
-    pub found_types: Vec<Type>,
+    pub annotation: TType,
+    pub found_types: Vec<TType>,
 }
 
 impl StatementSynthDataReturn {
-    pub fn new(annotation: Type) -> StatementSynthDataReturn {
+    pub fn new(annotation: TType) -> StatementSynthDataReturn {
         StatementSynthDataReturn {
             annotation,
             found_types: vec![],

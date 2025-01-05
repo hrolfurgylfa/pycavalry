@@ -22,7 +22,7 @@ use crate::{
     diagnostics::{custom::NotInScopeDiag, Diag, Diagnostic},
     scope::Scope,
     state::Info,
-    types::{union, Type, TypeLiteral},
+    types::{union, TType, Type, TypeLiteral},
 };
 
 #[derive(Clone, Debug, PartialEq)]
@@ -68,10 +68,10 @@ struct PartialAnnotation {
 #[derive(Clone, Debug, PartialEq)]
 struct RangedType {
     range: TextRange,
-    value: Type,
+    value: TType,
 }
 
-fn verify_annotation(ann: Annotation) -> Result<Type, Box<dyn Diag>> {
+fn verify_annotation(ann: Annotation) -> Result<TType, Box<dyn Diag>> {
     match ann {
         Annotation::Type(t) => Ok(t.value),
         Annotation::PartialAnnotation(t) => match t.annotation {
@@ -79,14 +79,14 @@ fn verify_annotation(ann: Annotation) -> Result<Type, Box<dyn Diag>> {
                 t.arguments
                     .into_iter()
                     .map(verify_annotation)
-                    .collect::<Result<Vec<Type>, Box<dyn Diag>>>()?,
+                    .collect::<Result<Vec<TType>, Box<dyn Diag>>>()?,
             )),
             PartialAnnotationType::Literal => {
                 let mut literals = Vec::with_capacity(t.arguments.len());
                 for arg in t.arguments {
                     match arg {
-                        Annotation::Type(t) => match t.value {
-                            Type::Literal(l) => literals.push(Type::Literal(l)),
+                        Annotation::Type(t) => match t.value.as_ref() {
+                            Type::Literal(l) => literals.push(TType::new(Type::Literal(l.clone()))),
                             other => {
                                 return Err(Diagnostic::error(
                                     format!("Expecting literal, found {}", other),
@@ -106,26 +106,26 @@ fn verify_annotation(ann: Annotation) -> Result<Type, Box<dyn Diag>> {
                 }
                 Ok(union(literals))
             }
-            PartialAnnotationType::Tuple => Ok(Type::Tuple(
+            PartialAnnotationType::Tuple => Ok(TType::new(Type::Tuple(
                 t.arguments
                     .into_iter()
                     .map(verify_annotation)
-                    .collect::<Result<Vec<Type>, Box<dyn Diag>>>()?,
-            )),
+                    .collect::<Result<Vec<TType>, Box<dyn Diag>>>()?,
+            ))),
         },
     }
 }
 
-pub fn synth_annotation(info: &Info, scope: &mut Scope, maybe_ast: Option<Expr>) -> Type {
+pub fn synth_annotation(info: &Info, scope: &mut Scope, maybe_ast: Option<Expr>) -> TType {
     let Some(ann) = _synth_annotation(info, scope, maybe_ast) else {
-        return Type::Unknown;
+        return TType::new(Type::Unknown);
     };
 
     match verify_annotation(ann) {
         Ok(typ) => typ,
         Err(err) => {
             info.reporter.add(err);
-            Type::Unknown
+            TType::new(Type::Unknown)
         }
     }
 }
@@ -137,7 +137,7 @@ fn _synth_annotation(
 ) -> Option<Annotation> {
     let Some(ast) = maybe_ast else {
         return Some(Annotation::Type(RangedType {
-            value: Type::Unknown,
+            value: TType::new(Type::Unknown),
             range: TextRange::default(),
         }));
     };
@@ -174,7 +174,7 @@ fn _synth_annotation(
             let range = n.range();
             let str = Arc::new(n.id.to_string());
             let typ = match scope.get(&str) {
-                Some(t) => t.typ,
+                Some(t) => t.typ.clone(),
                 None => {
                     // Parse partial annotations
                     if let Some(partial_annotation_type) = match str.as_str() {
@@ -193,17 +193,17 @@ fn _synth_annotation(
                     // Parse regular types
                     match str.as_str() {
                         // TODO: Remove this hardcoded non-import
-                        "Any" => Type::Any,
-                        "Unknown" => Type::Unknown,
-                        "str" => Type::String,
-                        "int" => Type::Int,
-                        "float" => Type::Float,
-                        "bool" => Type::Bool,
-                        "None" => Type::None,
-                        "..." => Type::Ellipsis,
+                        "Any" => TType::new(Type::Any),
+                        "Unknown" => TType::new(Type::Unknown),
+                        "str" => TType::new(Type::String),
+                        "int" => TType::new(Type::Int),
+                        "float" => TType::new(Type::Float),
+                        "bool" => TType::new(Type::Bool),
+                        "None" => TType::new(Type::None),
+                        "..." => TType::new(Type::Ellipsis),
                         unknown => {
                             info.reporter
-                                .add(NotInScopeDiag::new(unknown.to_owned().into(), range));
+                                .add(NotInScopeDiag::new(unknown.to_owned(), range));
                             return None;
                         }
                     }
@@ -212,7 +212,7 @@ fn _synth_annotation(
             Some(Annotation::Type(RangedType { range, value: typ }))
         }
         Expr::StringLiteral(l) => Some(Annotation::Type(RangedType {
-            value: Type::Literal(TypeLiteral::StringLiteral(l.value.to_str().to_owned())),
+            value: Type::Literal(TypeLiteral::StringLiteral(l.value.to_str().to_owned())).into(),
             range: l.range(),
         })),
         Expr::BytesLiteral(_) => unimplemented!("Bytes literal not supported."),
@@ -226,20 +226,20 @@ fn _synth_annotation(
                 }
             };
             Some(Annotation::Type(RangedType {
-                value: Type::Literal(literal),
+                value: TType::new(Type::Literal(literal)),
                 range,
             }))
         }
         Expr::BooleanLiteral(l) => Some(Annotation::Type(RangedType {
-            value: Type::Literal(TypeLiteral::BooleanLiteral(l.value)),
+            value: Type::Literal(TypeLiteral::BooleanLiteral(l.value)).into(),
             range: l.range(),
         })),
         Expr::NoneLiteral(l) => Some(Annotation::Type(RangedType {
-            value: Type::Literal(TypeLiteral::NoneLiteral),
+            value: Type::Literal(TypeLiteral::NoneLiteral).into(),
             range: l.range(),
         })),
         Expr::EllipsisLiteral(l) => Some(Annotation::Type(RangedType {
-            value: Type::Literal(TypeLiteral::EllipsisLiteral),
+            value: Type::Literal(TypeLiteral::EllipsisLiteral).into(),
             range: l.range(),
         })),
         e => unimplemented!("{:?}", e),

@@ -242,6 +242,24 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9fc0510504f03c51ada170672ac806f1f105a88aa97a5281117e1ddc3368e51a"
 
 [[package]]
+name = "gc"
+version = "0.5.0"
+source = "git+https://github.com/Manishearth/rust-gc.git?rev=f7232e2#f7232e21b0defeabf5ac5f44973942871d205988"
+dependencies = [
+ "gc_derive",
+]
+
+[[package]]
+name = "gc_derive"
+version = "0.5.0"
+source = "git+https://github.com/Manishearth/rust-gc.git?rev=f7232e2#f7232e21b0defeabf5ac5f44973942871d205988"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "synstructure",
+]
+
+[[package]]
 name = "getopts"
 version = "0.2.21"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -421,6 +439,7 @@ dependencies = [
  "ariadne",
  "clap",
  "clio",
+ "gc",
  "im",
  "indoc",
  "replace_with",
@@ -642,6 +661,17 @@ dependencies = [
  "proc-macro2",
  "quote",
  "unicode-ident",
+]
+
+[[package]]
+name = "synstructure"
+version = "0.13.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c8af7666ab7b6390ab78131fb5b0fce11d6b7a6951602017c35fa82800708971"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn",
 ]
 
 [[package]]

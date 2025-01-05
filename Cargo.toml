@@ -15,6 +15,7 @@ ruff_text_size = { path = "ruff/crates/ruff_text_size" }
 ruff_python_ast = { path = "ruff/crates/ruff_python_ast" }
 ruff_python_parser = { path = "ruff/crates/ruff_python_parser" }
 replace_with = "0.1.7"
+gc = { git = "https://github.com/Manishearth/rust-gc.git", rev = "f7232e2", features = ["derive"] }
 
 [dev-dependencies] 
 indoc = "2"

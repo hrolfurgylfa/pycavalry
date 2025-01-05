@@ -21,12 +21,12 @@ use ruff_text_size::TextRange;
 use super::macros;
 use crate::{
     diagnostics::{convert_range, Diag, DiagReport, DiagnosticType},
-    types::Type,
+    types::TType,
 };
 
 macros::custom_diagnostic!(
     (RevealTypeDiag, self, DiagnosticType::Info),
-    (typ: Type),
+    (typ: TType),
     |s: &RevealTypeDiag, c| format!("Type is {}", (&s.typ).fg(c))
 );
 
@@ -38,12 +38,12 @@ macros::custom_diagnostic!(
 
 macros::custom_diagnostic!(
     (ExpectedButGotDiag, self, DiagnosticType::Error),
-    (expected: Type, got: Type),
+    (expected: TType, got: TType),
     |s: &ExpectedButGotDiag, _| format!("Expected {} but found {}.", s.expected, s.got)
 );
 
 macros::custom_diagnostic!(
     (CantReassignLockedDiag, self, DiagnosticType::Error),
-    (expected: Type, got: Type, name: Arc<String>),
+    (expected: TType, got: TType, name: Arc<String>),
     |s: &CantReassignLockedDiag, _| format!("\"{0}\" is already defined as {1}, can't redefine as {2} as it was previously defined with a type hint, so it can't be redefined as a different type.", &s.name, s.expected, s.got)
 );

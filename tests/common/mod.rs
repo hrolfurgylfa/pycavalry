@@ -17,6 +17,7 @@ use std::{ops::Range, path::PathBuf, sync::Arc};
 
 use pycavalry::Diag;
 use pycavalry::Scope;
+use pycavalry::TType;
 use pycavalry::Type;
 use pycavalry::{error_check_file, synth_annotation, Info};
 use ruff_python_parser::{parse, Mode};
@@ -32,7 +33,7 @@ pub fn r(r: Range<u32>) -> TextRange {
     TextRange::new(TextSize::from(r.start), TextSize::from(r.end))
 }
 /// Quckly create a type from a python annotation.
-pub fn ann(s: &str) -> Type {
+pub fn ann(s: &str) -> TType {
     let info = Info::default();
     let module = parse(s, Mode::Expression).unwrap();
     let parsed = match module.into_syntax() {
@@ -41,7 +42,7 @@ pub fn ann(s: &str) -> Type {
     };
     let typ = synth_annotation(&info, &mut Scope::new(), Some(*parsed.body));
     assert_errors(&info, vec![]);
-    assert_ne!(typ, Type::Unknown);
+    assert_ne!(typ, Type::Unknown.into());
     typ
 }
 

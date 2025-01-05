@@ -13,7 +13,7 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-use super::{Type, TypeLiteral};
+use super::{TType, Type, TypeLiteral};
 
 /// Check if a is a subtype of b, A is a subtype of b if a can do everything b can.
 pub fn is_subtype(a: &Type, b: &Type) -> bool {
@@ -60,7 +60,7 @@ pub fn is_subtype(a: &Type, b: &Type) -> bool {
     }
 }
 
-fn collapse_subtypes(types: Vec<Type>) -> Vec<Type> {
+fn collapse_subtypes(types: Vec<TType>) -> Vec<TType> {
     let mut keep = vec![false; types.len()];
     for (i1, t1) in types.iter().enumerate() {
         keep[i1] = types.iter().enumerate().all(
@@ -79,29 +79,29 @@ fn collapse_subtypes(types: Vec<Type>) -> Vec<Type> {
         .filter_map(|(t, keep)| if keep { Some(t) } else { None })
         .collect()
 }
-fn flatten(types: Vec<Type>) -> Vec<Type> {
-    let mut flattened: Vec<Type> = Vec::with_capacity(types.len());
+fn flatten(types: Vec<TType>) -> Vec<TType> {
+    let mut flattened: Vec<TType> = Vec::with_capacity(types.len());
     for typ in types.into_iter() {
-        match typ {
-            Type::Union(types) => flattened.extend(types.into_iter()),
-            other => flattened.push(other),
+        match typ.as_ref() {
+            Type::Union(types) => flattened.extend(types.iter().cloned()),
+            _ => flattened.push(typ),
         };
     }
     flattened
 }
-fn collapse_union_types(mut types: Vec<Type>) -> Vec<Type> {
+fn collapse_union_types(mut types: Vec<TType>) -> Vec<TType> {
     types = flatten(types);
     types = collapse_subtypes(types);
     types
 }
-pub fn union(mut types: Vec<Type>) -> Type {
+pub fn union(mut types: Vec<TType>) -> TType {
     types = collapse_union_types(types);
 
     if types.is_empty() {
-        Type::Never
+        Type::Never.into()
     } else if types.len() == 1 {
         types.pop().unwrap()
     } else {
-        Type::Union(types)
+        Type::Union(types).into()
     }
 }

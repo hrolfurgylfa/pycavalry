@@ -14,8 +14,10 @@
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 use core::fmt;
+use std::{collections::HashMap, fmt::Display, hash::Hash, ops::Deref};
+
+use gc::{Finalize, Gc, Trace};
 use ruff_python_ast::{LiteralExpressionRef, Number, StmtFunctionDef};
-use std::{collections::HashMap, hash::Hash, sync::Arc};
 
 use crate::scope::ScopedType;
 
@@ -35,7 +37,44 @@ where
     Ok(())
 }
 
-#[derive(Clone, Debug, PartialEq, Default)]
+#[derive(Clone, Debug, PartialEq, Default, Trace, Finalize)]
+pub struct TType(Gc<Type>);
+
+impl TType {
+    pub fn new(typ: Type) -> Self {
+        TType(Gc::new(typ))
+    }
+    pub fn i(&self) -> Gc<Type> {
+        self.0.clone()
+    }
+}
+
+impl From<Type> for TType {
+    fn from(value: Type) -> Self {
+        Self::new(value)
+    }
+}
+
+impl std::convert::AsRef<Type> for TType {
+    fn as_ref(&self) -> &Type {
+        self.0.as_ref()
+    }
+}
+
+impl Deref for TType {
+    type Target = Type;
+    fn deref(&self) -> &Self::Target {
+        self.0.deref()
+    }
+}
+
+impl Display for TType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        self.0.fmt(f)
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Default, Trace, Finalize)]
 pub enum Type {
     Any,
     #[default]
@@ -48,15 +87,15 @@ pub enum Type {
     Bool,
     None,
     Ellipsis,
-    Tuple(Vec<Type>),
+    Tuple(Vec<TType>),
 
     Literal(TypeLiteral),
     Function(Function),
     PartialFunction(PartialFunction),
     Class(Class),
 
-    Union(Vec<Type>),
-    Module(Arc<String>, HashMap<Arc<String>, ScopedType>),
+    Union(Vec<TType>),
+    Module(String, HashMap<String, ScopedType>),
 }
 
 impl fmt::Display for Type {
@@ -81,9 +120,9 @@ impl fmt::Display for Type {
             Type::PartialFunction(_) => write!(f, "Partial Func"),
             Type::Class(cls) => write!(f, "{}", cls),
             Type::Union(types) => {
-                if types.iter().all(|i| matches!(i, Type::Literal(_))) {
+                if types.iter().all(|i| matches!(i.deref(), Type::Literal(_))) {
                     write!(f, "Literal[")?;
-                    write_iter(f, types.iter(), |f, t| match t {
+                    write_iter(f, types.iter(), |f, t| match t.deref() {
                         Type::Literal(l) => display_type_literal_inside(f, l),
                         _ => unreachable!(),
                     })?;
@@ -99,19 +138,20 @@ impl fmt::Display for Type {
     }
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Trace, Finalize)]
 pub struct Function {
-    pub args: Vec<Type>,
-    pub arg_names: Vec<Arc<String>>,
-    pub ret: Box<Type>,
+    pub args: Vec<TType>,
+    pub arg_names: Vec<String>,
+    pub ret: TType,
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Trace, Finalize)]
 pub struct PartialFunction {
+    #[unsafe_ignore_trace]
     pub ast: StmtFunctionDef,
-    pub args: Option<Vec<Type>>,
-    pub arg_names: Option<Vec<Arc<String>>>,
-    pub ret: Option<Box<Type>>,
+    pub args: Option<Vec<TType>>,
+    pub arg_names: Option<Vec<String>>,
+    pub ret: Option<TType>,
 }
 
 impl TryFrom<PartialFunction> for Function {
@@ -119,9 +159,9 @@ impl TryFrom<PartialFunction> for Function {
     fn try_from(value: PartialFunction) -> Result<Self, Self::Error> {
         if value.args.is_some() && value.arg_names.is_some() && value.ret.is_some() {
             Ok(Function {
-                args: value.args.unwrap(),
-                arg_names: value.arg_names.unwrap(),
-                ret: value.ret.unwrap(),
+                args: value.args.clone().unwrap(),
+                arg_names: value.arg_names.clone().unwrap(),
+                ret: value.ret.clone().unwrap(),
             })
         } else {
             Err(value)
@@ -130,7 +170,7 @@ impl TryFrom<PartialFunction> for Function {
 }
 
 impl Function {
-    pub fn new(args: Vec<Type>, arg_names: Vec<Arc<String>>, ret: Box<Type>) -> Function {
+    pub fn new(args: Vec<TType>, arg_names: Vec<String>, ret: TType) -> Function {
         Function {
             args,
             arg_names,
@@ -151,19 +191,15 @@ impl fmt::Display for Function {
     }
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Trace, Finalize)]
 pub struct Class {
-    pub name: Arc<String>,
+    pub name: String,
     pub functions: Vec<Function>,
-    pub parameters: Vec<(String, Type)>,
+    pub parameters: Vec<(String, TType)>,
 }
 
 impl Class {
-    pub fn new(
-        name: Arc<String>,
-        functions: Vec<Function>,
-        parameters: Vec<(String, Type)>,
-    ) -> Class {
+    pub fn new(name: String, functions: Vec<Function>, parameters: Vec<(String, TType)>) -> Class {
         Class {
             name,
             functions,
@@ -186,10 +222,10 @@ pub struct TypeClass {
 #[derive(Clone, Debug, PartialEq)]
 pub struct TypeClassProperty {
     name: String,
-    typ: Type,
+    typ: TType,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Trace, Finalize)]
 pub enum TypeLiteral {
     StringLiteral(String),
     BytesLiteral(Vec<u8>),
