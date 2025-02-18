@@ -14,7 +14,13 @@
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 use core::fmt;
-use std::{borrow::Borrow, fmt::Debug, io, ops::Range, path::Path};
+use std::{
+    borrow::Borrow,
+    fmt::{Debug, Display},
+    io,
+    ops::Range,
+    path::Path,
+};
 
 use ariadne::{Color, Config, Label, Report, ReportKind, Source};
 use clio::Output;
@@ -40,7 +46,7 @@ pub fn type_to_kind(diagnostic_type: &DiagnosticType) -> ReportKind<'static> {
 
 pub type DiagReport<'a> = Report<'a, (&'a str, std::ops::Range<usize>)>;
 
-pub trait Diag: DynCompare + Debug {
+pub trait Diag: DynCompare + Debug + Display {
     fn print<'a>(&'a self, file_name: &'a str) -> DiagReport<'a>;
 
     fn write(&self, f: &mut Output, file_name: &Path, file: &str) -> io::Result<()> {
@@ -101,6 +107,12 @@ macros::impl_diagnostic_to_box!(Diagnostic);
 
 pub fn convert_range(range: TextRange) -> Range<usize> {
     range.start().to_usize()..range.end().to_usize()
+}
+
+impl Display for Diagnostic {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "Diagnostic({}, )", self.typ)
+    }
 }
 
 impl Diag for Diagnostic {

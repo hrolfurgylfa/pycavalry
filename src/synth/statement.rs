@@ -205,9 +205,15 @@ pub fn check_statement(info: &Info, data: &mut StatementSynthData, scope: &mut S
         }
         Stmt::ClassDef(def) => {
             let cls_name = def.name.id.to_string();
+            let bases = def
+                .bases()
+                .iter()
+                .map(|f| synth(info, scope, f.clone()))
+                .collect::<Vec<_>>();
+
             scope.set(
                 Arc::new(cls_name.clone()),
-                Type::Class(Class::new(cls_name, vec![], vec![])),
+                Type::Class(Class::new(cls_name, vec![], bases)),
             );
         }
         Stmt::Pass(_) => (),

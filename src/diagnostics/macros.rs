@@ -27,6 +27,17 @@ macro_rules! custom_diagnostic {
 
         crate::diagnostics::macros::impl_diagnostic_to_box!($typ);
 
+        impl std::fmt::Display for $typ {
+            fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                write!(f, concat!(stringify!($typ), "("))?;
+                $(
+                    write!(f, "{}, ", self.$prop)?;
+                )*
+                write!(f, ")")?;
+                Ok(())
+            }
+        }
+
         impl Diag for $typ {
             fn print<'a>(&'a $self, file_name: &'a str) -> DiagReport<'a> {
                 use crate::diagnostics::{type_to_color, type_to_kind};

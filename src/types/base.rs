@@ -194,16 +194,16 @@ impl fmt::Display for Function {
 #[derive(Clone, Debug, PartialEq, Trace, Finalize)]
 pub struct Class {
     pub name: String,
-    pub functions: Vec<Function>,
-    pub parameters: Vec<(String, TType)>,
+    pub attributes: Vec<(String, TType)>,
+    pub bases: Vec<TType>,
 }
 
 impl Class {
-    pub fn new(name: String, functions: Vec<Function>, parameters: Vec<(String, TType)>) -> Class {
+    pub fn new(name: String, attributes: Vec<(String, TType)>, bases: Vec<TType>) -> Class {
         Class {
             name,
-            functions,
-            parameters,
+            attributes,
+            bases,
         }
     }
 }

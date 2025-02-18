@@ -13,26 +13,27 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
+use std::ops::Deref;
 use std::{ops::Range, path::PathBuf, sync::Arc};
 
-use pycavalry::Diag;
 use pycavalry::Scope;
 use pycavalry::TType;
 use pycavalry::Type;
 use pycavalry::{error_check_file, synth_annotation, Info};
 use ruff_python_parser::{parse, Mode};
-use ruff_text_size::{TextRange, TextSize};
+use ruff_python_trivia::CommentRanges;
+use ruff_text_size::{Ranged, TextRange, TextSize};
 
 /// Shorthand to quickly create an **a**rc **st**ring.
 #[allow(dead_code)]
 pub fn ars(s: impl Into<String>) -> Arc<String> {
     Arc::new(s.into())
 }
-/// Quckly create a text range from a rust range.
+/// Quickly create a text range from a rust range.
 pub fn r(r: Range<u32>) -> TextRange {
     TextRange::new(TextSize::from(r.start), TextSize::from(r.end))
 }
-/// Quckly create a type from a python annotation.
+/// Quickly create a type from a python annotation.
 pub fn ann(s: &str) -> TType {
     let info = Info::default();
     let module = parse(s, Mode::Expression).unwrap();
@@ -46,7 +47,7 @@ pub fn ann(s: &str) -> TType {
     typ
 }
 
-pub fn assert_errors(info: &Info, expected: Vec<Box<dyn Diag>>) {
+pub fn assert_errors(info: &Info, expected: Vec<&str>) {
     let errors_lock = info.reporter.errors();
     let errors = errors_lock.lock().unwrap();
     if errors.len() != expected.len() {
@@ -57,14 +58,41 @@ pub fn assert_errors(info: &Info, expected: Vec<Box<dyn Diag>>) {
         panic!("");
     }
     for (error, expected) in errors.iter().zip(expected.iter()) {
-        assert_eq!(error, expected);
+        assert_eq!(&format!("{}", error), expected);
     }
 }
-pub fn run_with_errors(
-    filename: impl Into<PathBuf>,
-    content: impl Into<String>,
-    expected: Vec<Box<dyn Diag>>,
-) {
-    let info = error_check_file(filename.into(), content.into()).unwrap();
+
+fn get_all_expected_comments(content: &str) -> Vec<&str> {
+    let module = parse(content, Mode::Module).unwrap();
+    let errors = module.errors();
+    if !errors.is_empty() {
+        panic!("Failed to parse test module: {:?}", errors);
+    }
+    let comment_ranges = CommentRanges::from(module.tokens());
+
+    let mut expected_errors = vec![];
+    for range in comment_ranges.deref() {
+        let found = &content[range.range()];
+        println!("Found: \"{}\"", found);
+        expected_errors.extend(
+            found
+                .lines()
+                .filter_map(|a| {
+                    a.strip_prefix("#")
+                        .unwrap_or(a)
+                        .trim_start()
+                        .strip_prefix("Debug:")
+                })
+                .map(|a| a.trim()),
+        );
+    }
+
+    expected_errors
+}
+
+pub fn run_with_errors(filename: impl Into<PathBuf>, content: impl Into<String>) {
+    let content: String = content.into();
+    let expected = get_all_expected_comments(&content);
+    let info = error_check_file(filename.into(), content.clone()).unwrap();
     assert_errors(&info, expected);
 }

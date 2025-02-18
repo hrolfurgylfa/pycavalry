@@ -1,4 +1,4 @@
-use pycavalry::RevealTypeDiag;
+use indoc::indoc;
 
 mod common;
 use common::*;
@@ -7,7 +7,8 @@ use common::*;
 fn test_lambda_return_no_args() {
     run_with_errors(
         "test_lambda_return_no_args.py",
-        "reveal_type((lambda x, y, z: \"asdf\")(1, 2, 3))",
-        vec![RevealTypeDiag::new(ann("Literal[\"asdf\"]"), r(12..45)).into()],
+        indoc! {r#"
+            reveal_type((lambda x, y, z: "asdf")(1, 2, 3))  # Debug: RevealTypeDiag(Literal["asdf"], )
+        "#},
     );
 }

@@ -14,7 +14,6 @@
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 use indoc::indoc;
-use pycavalry::{CantReassignLockedDiag, ExpectedButGotDiag, RevealTypeDiag, Type};
 
 mod common;
 use common::*;
@@ -26,19 +25,12 @@ fn test_synth_ann_assign_1() {
         indoc! {r#"
             from typing import reveal_type
             a: int = 3
-            reveal_type(a)
-            a: Literal[5] = 5
-            reveal_type(a)
-            a: int = "f"
-            reveal_type(a) "#
-        },
-        vec![
-            RevealTypeDiag::new(Type::Int, r(54..55)).into(),
-            CantReassignLockedDiag::new(Type::Int, ann("Literal[5]"), ars("a"), r(57..74)).into(),
-            RevealTypeDiag::new(Type::Int, r(87..88)).into(),
-            ExpectedButGotDiag::new(Type::Int, ann("Literal['f']"), r(99..102)).into(),
-            CantReassignLockedDiag::new(Type::Int, Type::Int, ars("a"), r(90..102)).into(),
-            RevealTypeDiag::new(Type::Int, r(115..116)).into(),
-        ],
+            reveal_type(a)  # Debug: RevealTypeDiag(int, )
+            a: Literal[5] = 5  # Debug: CantReassignLockedDiag(int, Literal[5], a, )
+            reveal_type(a)  # Debug: RevealTypeDiag(int, )
+            a: int = "f"  # Debug: ExpectedButGotDiag(int, Literal["f"], )
+            # Debug: CantReassignLockedDiag(int, int, a, )
+            reveal_type(a)  # Debug: RevealTypeDiag(int, )
+        "#},
     );
 }
