@@ -25,12 +25,12 @@ fn test_synth_ann_assign_1() {
         indoc! {r#"
             from typing import reveal_type
             a: int = 3
-            reveal_type(a)  # Debug: RevealTypeDiag(int, )
-            a: Literal[5] = 5  # Debug: CantReassignLockedDiag(int, Literal[5], a, )
-            reveal_type(a)  # Debug: RevealTypeDiag(int, )
-            a: int = "f"  # Debug: ExpectedButGotDiag(int, Literal["f"], )
-            # Debug: CantReassignLockedDiag(int, int, a, )
-            reveal_type(a)  # Debug: RevealTypeDiag(int, )
+            reveal_type(a)  # Debug: RevealTypeDiag(int)
+            a: Literal[5] = 5  # Debug: CantReassignLockedDiag(int, Literal[5], a)
+            reveal_type(a)  # Debug: RevealTypeDiag(int)
+            a: int = "f"  # Debug: ExpectedButGotDiag(int, Literal["f"])
+            # Debug: CantReassignLockedDiag(int, int, a)
+            reveal_type(a)  # Debug: RevealTypeDiag(int)
         "#},
     );
 }

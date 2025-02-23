@@ -29,12 +29,11 @@ macro_rules! custom_diagnostic {
 
         impl std::fmt::Display for $typ {
             fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-                write!(f, concat!(stringify!($typ), "("))?;
+                let mut temp_vec = Vec::new();
                 $(
-                    write!(f, "{}, ", self.$prop)?;
+                    temp_vec.push(format!("{}", self.$prop));
                 )*
-                write!(f, ")")?;
-                Ok(())
+                write!(f, concat!(stringify!($typ), "({})"), temp_vec.join(", "))
             }
         }
 

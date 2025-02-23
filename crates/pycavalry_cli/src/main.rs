@@ -23,7 +23,7 @@ use std::{
 use clap::Parser;
 use clio::{ClioPath, Output};
 
-use pycavalry::{error_check_file, Error, Info};
+use pycavalry_lib::{error_check_file, Error, Info};
 
 #[derive(Parser)]
 #[clap(name = "pycavalry")]
