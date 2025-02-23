@@ -19,7 +19,7 @@ use std::collections::HashMap;
 use std::mem;
 use std::sync::Arc;
 
-use crate::diagnostics::custom::{CantReassignLockedDiag, NotInScopeDiag};
+use crate::custom_diagnostics::{CantReassignLockedDiag, NotInScopeDiag};
 use crate::scope::{Scope, ScopedType};
 use crate::state::{Info, PartialItem, StatementSynthData, StatementSynthDataReturn};
 use crate::synth::synth;

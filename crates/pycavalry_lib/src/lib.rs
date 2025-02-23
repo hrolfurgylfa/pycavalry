@@ -20,13 +20,13 @@ use std::{path::PathBuf, string::FromUtf8Error};
 use ruff_python_parser::{parse, Mode};
 use state::StatementSynthData;
 
-pub use diagnostics::{custom::*, Diag, Diagnostic, DiagnosticType};
+pub use custom_diagnostics::*;
 pub use scope::{Scope, ScopedType};
 pub use state::Info;
 pub use synth::{check_statement, synth, synth_annotation};
 pub use types::{TType, Type, TypeLiteral};
 
-mod diagnostics;
+mod custom_diagnostics;
 mod scope;
 mod state;
 mod synth;

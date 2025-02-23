@@ -13,9 +13,12 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-pub mod base;
+mod diagnostic;
 pub mod macros;
-pub mod custom;
-pub mod dyn_compare;
+mod reporter;
+mod dyn_compare;
 
-pub use base::*;
+pub use diagnostic::{
+    convert_range, type_to_color, type_to_kind, Diag, DiagReport, Diagnostic, DiagnosticType,
+};
+pub use reporter::Reporter;

@@ -460,7 +460,30 @@ version = "0.1.0"
 dependencies = [
  "clap",
  "clio",
+ "pycavalry_jinja",
  "pycavalry_lib",
+]
+
+[[package]]
+name = "pycavalry_diagnostics"
+version = "0.1.0"
+dependencies = [
+ "ariadne",
+ "clio",
+ "ruff_python_parser",
+ "ruff_text_size",
+]
+
+[[package]]
+name = "pycavalry_jinja"
+version = "0.1.0"
+dependencies = [
+ "gc",
+ "im",
+ "pycavalry_diagnostics",
+ "pycavalry_lib",
+ "ruff_python_ast",
+ "ruff_python_parser",
 ]
 
 [[package]]
@@ -472,16 +495,13 @@ dependencies = [
  "gc",
  "im",
  "indoc",
+ "pycavalry_diagnostics",
  "replace_with",
  "ruff_python_ast",
  "ruff_python_parser",
  "ruff_python_trivia",
  "ruff_text_size",
 ]
-
-[[package]]
-name = "pyright_jinja"
-version = "0.1.0"
 
 [[package]]
 name = "quote"

@@ -17,7 +17,7 @@ use ruff_python_ast::{Expr, ExprContext, Number};
 use ruff_text_size::Ranged;
 use std::sync::Arc;
 
-use crate::diagnostics::custom::{ExpectedButGotDiag, NotInScopeDiag, RevealTypeDiag};
+use crate::custom_diagnostics::{ExpectedButGotDiag, NotInScopeDiag, RevealTypeDiag};
 use crate::scope::Scope;
 use crate::state::Info;
 use crate::types::{is_subtype, Function, TType, Type, TypeLiteral};

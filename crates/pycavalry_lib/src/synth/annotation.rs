@@ -19,11 +19,12 @@ use ruff_python_ast::{Expr, Number};
 use ruff_text_size::{Ranged, TextRange};
 
 use crate::{
-    diagnostics::{custom::NotInScopeDiag, Diag, Diagnostic},
+    custom_diagnostics::NotInScopeDiag,
     scope::Scope,
     state::Info,
     types::{union, TType, Type, TypeLiteral},
 };
+use pycavalry_diagnostics::{Diag, Diagnostic};
 
 #[derive(Clone, Debug, PartialEq)]
 enum Annotation {

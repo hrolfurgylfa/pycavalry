@@ -8,3 +8,4 @@ license.workspace = true
 clap = { version = "4.5.4", features = ["derive"] }
 clio = { version = "0.3.5", features = ["clap-parse"] }
 pycavalry_lib = { path = "../pycavalry_lib" }
+pycavalry_jinja = { path = "../pycavalry_jinja" }

@@ -4,7 +4,7 @@ members = [
     "crates/pycavalry_lib",
     "crates/pycavalry_cli",
     "crates/pycavalry_jinja",
-    "ruff/crates/*",
+    "ruff/crates/*", "crates/pycavalry_diagnostics",
 ]
 exclude = ["ruff"]
 default-members = ["crates/pycavalry_cli"]

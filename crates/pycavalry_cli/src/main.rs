@@ -15,6 +15,7 @@
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 use std::{
+    collections::HashSet,
     fs::read,
     io::Write,
     path::{Path, PathBuf},
@@ -46,38 +47,54 @@ fn read_file(file_name: &Path) -> Result<String, Error> {
     Ok(content)
 }
 
-fn read_and_check(file_name: PathBuf) -> Result<Info, Error> {
+fn read_and_check_python(file_name: PathBuf) -> Result<Info, Error> {
     let content = read_file(&file_name)?;
     error_check_file(file_name, content)
+}
+
+fn read_and_check_jinja(file_name: PathBuf) -> Result<(), Error> {
+    let content = read_file(&file_name)?;
+    pycavalry_jinja::error_check_file(file_name, &content)
 }
 
 fn main() -> Result<(), Error> {
     let mut opt = Opt::parse();
 
-    match read_and_check(opt.file) {
-        Ok(info) => {
-            let error_count = info.reporter.len();
-            info.reporter.flush(&info, &mut opt.output)?;
-            if error_count > 0 {
-                writeln!(opt.output, "Found {} errors", error_count)?;
-            } else {
-                writeln!(opt.output, "No errors found")?;
-            }
-        }
-        Err(e) => match e {
-            Error::Io(e) => {
-                write!(opt.output, "Failed to open file: {}", e)?;
-            }
-            Error::FromUtf8(e) => {
-                write!(opt.output, "File contains invalid UTF8 sequences: {}", e)?;
-            }
-            Error::RuffParse(errors) => {
-                writeln!(opt.output, "Failed to parse Python into AST:")?;
-                for error in errors {
-                    write!(opt.output, "{}", error)?;
+    let python_extensions: HashSet<_> = ["py", "pyi"].into();
+    let jinja_extensions: HashSet<_> = ["jinja", "jinja2", "html"].into();
+
+    let file_name = opt.file.to_string_lossy();
+    let file_extension = file_name.split(".").last().unwrap();
+
+    if jinja_extensions.contains(file_extension) {
+        let res = read_and_check_jinja(opt.file);
+    } else if python_extensions.contains(file_extension) {
+        match read_and_check_python(opt.file) {
+            Ok(info) => {
+                let error_count = info.reporter.len();
+                info.reporter
+                    .flush(&info.file_name, &info.file_content, &mut opt.output)?;
+                if error_count > 0 {
+                    writeln!(opt.output, "Found {} errors", error_count)?;
+                } else {
+                    writeln!(opt.output, "No errors found")?;
                 }
             }
-        },
+            Err(e) => match e {
+                Error::Io(e) => {
+                    write!(opt.output, "Failed to open file: {}", e)?;
+                }
+                Error::FromUtf8(e) => {
+                    write!(opt.output, "File contains invalid UTF8 sequences: {}", e)?;
+                }
+                Error::RuffParse(errors) => {
+                    writeln!(opt.output, "Failed to parse Python into AST:")?;
+                    for error in errors {
+                        write!(opt.output, "{}", error)?;
+                    }
+                }
+            },
+        }
     }
 
     Ok(())

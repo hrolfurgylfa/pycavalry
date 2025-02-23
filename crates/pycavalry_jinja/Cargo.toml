@@ -1,0 +1,13 @@
+[package]
+name = "pycavalry_jinja"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+im = "15.1.0"
+gc = { git = "https://github.com/Manishearth/rust-gc.git", rev = "f7232e2", features = ["derive"] }
+ruff_python_ast = { path = "../../ruff/crates/ruff_python_ast" }
+ruff_python_parser = { path = "../../ruff/crates/ruff_python_parser" }
+pycavalry_lib = { path = "../pycavalry_lib" }
+pycavalry_diagnostics = { path = "../pycavalry_diagnostics" }

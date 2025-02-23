@@ -14,20 +14,16 @@
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 use std::{
-    collections::VecDeque,
-    fmt, hash, io,
+    collections::VecDeque, hash,
     os::unix::ffi::OsStrExt,
     path::PathBuf,
-    sync::{Arc, Mutex},
+    sync::Arc,
 };
 
-use clio::Output;
-use ruff_text_size::TextRange;
 
-use crate::{
-    diagnostics::{Diag, Diagnostic, DiagnosticType},
-    types::TType,
-};
+use pycavalry_diagnostics::Reporter;
+
+use crate::TType;
 
 #[derive(Clone, Debug, PartialEq, Default)]
 pub struct StatementSynthData {
@@ -68,53 +64,6 @@ impl StatementSynthDataReturn {
             annotation,
             found_types: vec![],
         }
-    }
-}
-
-#[derive(Clone, Default)]
-pub struct Reporter(Arc<Mutex<Vec<Box<dyn Diag>>>>);
-
-impl fmt::Debug for Reporter {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "Reporter")
-    }
-}
-
-impl Reporter {
-    pub fn info(&self, body: impl Into<String>, range: TextRange) {
-        self.add(Diagnostic::new(body.into(), DiagnosticType::Info, range))
-    }
-    pub fn warning(&self, body: impl Into<String>, range: TextRange) {
-        self.add(Diagnostic::new(body.into(), DiagnosticType::Warning, range))
-    }
-    pub fn error(&self, body: impl Into<String>, range: TextRange) {
-        self.add(Diagnostic::new(body.into(), DiagnosticType::Error, range))
-    }
-    pub fn add(&self, err: impl Into<Box<dyn Diag>>) {
-        let mut errors = self.0.lock().unwrap();
-        errors.push(err.into());
-    }
-    pub fn extend(&self, new_errors: impl Into<Vec<Box<dyn Diag>>>) {
-        let mut errors = self.0.lock().unwrap();
-        errors.extend(new_errors.into());
-    }
-
-    pub fn flush(&self, info: &Info, output: &mut Output) -> io::Result<()> {
-        let errors = self.0.lock().unwrap();
-        for e in errors.iter() {
-            e.write(output, &info.file_name, &info.file_content)?
-        }
-        Ok(())
-    }
-    pub fn len(&self) -> usize {
-        let errors = self.0.lock().unwrap();
-        errors.len()
-    }
-    pub fn is_empty(&self) -> bool {
-        self.len() == 0
-    }
-    pub fn errors(&self) -> Arc<Mutex<Vec<Box<dyn Diag>>>> {
-        self.0.clone()
     }
 }
 
